@@ -1,0 +1,19 @@
+{
+  "name": "spotify-style-search",
+  "version": "1.0.0",
+  "description": "A from-scratch search UI inspired by the UX *pattern* observed in Spotify's desktop app (static analysis of its bundled `xpui.spa` web UI, v1.3.5.3058). No Spotify code, assets, or API credentials were used — this is original HTML/CSS/JS, backed by the free iTunes Search API for real catalog data.",
+  "main": "config.example.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.5.3",
+    "@capacitor/core": "^8.5.3"
+  }
+}

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Groov</string>
+    <string name="title_activity_main">Groov</string>
+    <string name="package_name">com.groov.app</string>
+    <string name="custom_url_scheme">com.groov.app</string>
+</resources>
