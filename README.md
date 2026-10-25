@@ -1,9 +1,10 @@
-# Spotify-style search (independent implementation)
+# Groov
 
-A from-scratch search UI inspired by the UX *pattern* observed in Spotify's
-desktop app (static analysis of its bundled `xpui.spa` web UI, v1.3.5.3058).
-No Spotify code, assets, or API credentials were used — this is original
-HTML/CSS/JS, backed by the free iTunes Search API for real catalog data.
+A from-scratch music search and player app, inspired by the UX *pattern*
+observed in Spotify's desktop app (static analysis of its bundled
+`xpui.spa` web UI, v1.3.5.3058). No Spotify code, assets, or API
+credentials were used — this is original HTML/CSS/JS, backed by the free
+iTunes Search API for real catalog data.
 
 ## What was observed (evidence, not implementation)
 
