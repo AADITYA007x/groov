@@ -997,6 +997,22 @@ document.addEventListener("click", (e) => {
   }
 });
 
+// Clicking a track card/top-result itself (not its play or add button)
+// used to follow the card's href out to YouTube or Apple Music — jarring
+// when the point of the app is in-app playback. Play it in-app instead;
+// the href is kept on the element for long-press / open-in-new-tab / share,
+// it's just no longer what a plain click does. Registered after the
+// play-overlay and add-overlay handlers above so e.defaultPrevented is
+// already set when one of those inner buttons was the real target.
+document.addEventListener("click", (e) => {
+  if (e.defaultPrevented) return;
+  const link = e.target.closest("a.card[data-id], a.top-result-card[data-id]");
+  if (!link) return;
+  e.preventDefault();
+  buildQueueFromContext(link);
+  playTrack(link.dataset.id);
+});
+
 // --- iTunes Search API ---------------------------------------------------
 
 function normalizeResult(raw, category) {
