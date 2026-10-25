@@ -120,7 +120,24 @@ costs quota.
 
 ## Run it
 
+1. Clone the repo.
+2. `cp www/config.example.js www/config.js` — optional, only needed for
+   full-length YouTube playback (see above); the app runs fine without it,
+   using 30s previews.
+3. Serve the `www/` folder:
+   ```bash
+   python3 -m http.server 4173 --directory www
+   ```
+   then open http://localhost:4173.
+
+### Building the Android app
+
 ```bash
-python3 -m http.server 4173 --directory .
+npm install
+npx cap sync android
+cd android && ./gradlew assembleDebug
 ```
-then open http://localhost:4173.
+The debug APK lands at
+`android/app/build/outputs/apk/debug/app-debug.apk` — install it on a
+device/emulator, or open the `android/` folder in Android Studio and run
+from there.
