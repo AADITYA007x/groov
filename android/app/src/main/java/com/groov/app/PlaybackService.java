@@ -11,8 +11,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ServiceInfo;
 import android.graphics.Bitmap;
-import android.media.AudioAttributes;
-import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.net.wifi.WifiManager;
 import android.os.Build;
@@ -31,7 +29,7 @@ import androidx.core.content.ContextCompat;
 /**
  * Foreground "media playback" service: keeps Groov alive with the screen off,
  * and gives it a media notification, lock-screen controls, Bluetooth and
- * headphone buttons, audio focus (pauses for calls) and pause-on-unplug.
+ * headphone buttons and pause-on-unplug.
  *
  * The music itself still plays inside the WebView. This service only mirrors
  * the state JS sends through MediaControlsPlugin, and sends button presses
@@ -68,10 +66,6 @@ public class PlaybackService extends Service {
     private static PlaybackService running;
 
     private MediaSessionCompat session;
-    private AudioManager audioManager;
-    private AudioFocusRequest focusRequest;
-    private boolean hasAudioFocus;
-    private boolean resumeOnFocusGain;
     private PowerManager.WakeLock wakeLock;
     private WifiManager.WifiLock wifiLock;
     private boolean inForeground;
@@ -146,8 +140,6 @@ public class PlaybackService extends Service {
         });
         session.setActive(true);
 
-        audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "groov:playback");
         wakeLock.setReferenceCounted(false);
@@ -214,7 +206,6 @@ public class PlaybackService extends Service {
         } catch (IllegalArgumentException ignored) {
             // not registered
         }
-        abandonAudioFocus();
         releaseLocks();
         session.setActive(false);
         session.release();
@@ -267,7 +258,6 @@ public class PlaybackService extends Service {
         );
 
         if (s.playing) {
-            requestAudioFocus();
             acquireLocks();
         } else {
             releaseLocks();
@@ -366,67 +356,12 @@ public class PlaybackService extends Service {
         return b.build();
     }
 
-    // --- Audio focus, unplug, locks ---------------------------------------------
-
-    private final AudioManager.OnAudioFocusChangeListener focusListener = change -> {
-        switch (change) {
-            case AudioManager.AUDIOFOCUS_LOSS:
-                // Another app started playing: stop for good.
-                hasAudioFocus = false;
-                resumeOnFocusGain = false;
-                if (current.playing) MediaControlsPlugin.emit("pause");
-                break;
-            case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT:
-                // A call or similar: pause, and resume afterwards.
-                if (current.playing) {
-                    resumeOnFocusGain = true;
-                    MediaControlsPlugin.emit("pause");
-                }
-                break;
-            case AudioManager.AUDIOFOCUS_GAIN:
-                if (resumeOnFocusGain) {
-                    resumeOnFocusGain = false;
-                    MediaControlsPlugin.emit("play");
-                }
-                break;
-            default:
-                // LOSS_TRANSIENT_CAN_DUCK: keep playing (navigation prompts etc).
-                break;
-        }
-    };
-
-    private void requestAudioFocus() {
-        if (hasAudioFocus) return;
-        int result;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            if (focusRequest == null) {
-                focusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-                    .setAudioAttributes(
-                        new AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_MEDIA)
-                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                            .build()
-                    )
-                    .setOnAudioFocusChangeListener(focusListener)
-                    .setWillPauseWhenDucked(false)
-                    .build();
-            }
-            result = audioManager.requestAudioFocus(focusRequest);
-        } else {
-            result = audioManager.requestAudioFocus(focusListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
-        }
-        hasAudioFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
-    }
-
-    private void abandonAudioFocus() {
-        if (!hasAudioFocus) return;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && focusRequest != null) {
-            audioManager.abandonAudioFocusRequest(focusRequest);
-        } else {
-            audioManager.abandonAudioFocus(focusListener);
-        }
-        hasAudioFocus = false;
-    }
+    // --- Unplug, locks ------------------------------------------------------------
+    //
+    // No audio focus here on purpose: the WebView's media engine already holds
+    // focus for the music (and pauses for calls). Requesting it again from
+    // this service made Android take focus away from the WebView, which
+    // paused every song ~0.2s after it started.
 
     private final BroadcastReceiver noisyReceiver = new BroadcastReceiver() {
         @Override
