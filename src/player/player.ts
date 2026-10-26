@@ -1,46 +1,55 @@
-// Playback: two interchangeable engines behind one interface.
+// Playback engines + queue. No layout here: the player bar and the Now
+// Playing screen (ui/now-playing.ts) render from the events this emits.
+//
+// Two interchangeable engines behind one interface:
 //  - "audio":   the free, always-available 30s iTunes preview clip.
-//  - "youtube": full-length via the YouTube IFrame Player, used when a YouTube
-//               key is configured and a matching video is found. Falls back to
+//  - "youtube": full length via ONE hidden YouTube IFrame player, used when a
+//               YouTube key is set and a match is found. Falls back to
 //               "audio" on any failure (no key, quota, no match, network).
+//
+// The YouTube iframe lives in #yt-host. It's invisible by default (the UI
+// shows album art); the Now Playing screen can lay it over its artwork
+// slot to show the video. Only CSS moves it, never the DOM, because
+// re-parenting a live iframe reloads it and restarts the song.
 import { getYoutubeApiKey } from "../config";
 import { findYoutubeVideoId, loadYoutubeIframeApi } from "../api/youtube";
 import { bus, trackRegistry } from "../state";
-import { $, cssEscape, formatTime } from "../utils";
-import { updateBackgroundArt } from "../ui/layout";
+import type { Item } from "../types";
+import { $ } from "../utils";
 
-type Engine = "audio" | "youtube";
-
-const playerBar = $("player-bar");
-const playerArt = $<HTMLImageElement>("player-art");
-const playerName = $("player-name");
-const playerArtist = $("player-artist");
-const playerToggle = $("player-toggle");
-const playerBarTrack = document.querySelector<HTMLElement>(".player-bar-track")!;
-const playerBarFill = $("player-bar-fill");
-const playerTimeElapsed = $("player-time-elapsed");
-const playerTimeTotal = $("player-time-total");
-const youtubePlayerEl = $("youtube-player");
-const youtubePlayerWrapEl = $("youtube-player-wrap");
-const videoExpandBtn = $("video-expand-btn");
-const videoOverlay = $("video-overlay");
-const videoCollapseBtn = $("video-collapse");
-const youtubePlayerExpandedEl = $("youtube-player-expanded");
-const videoOverlayName = $("video-overlay-name");
-const videoOverlayArtist = $("video-overlay-artist");
+export type Engine = "audio" | "youtube";
 
 let currentTrackId: string | null = null;
-let currentYoutubeVideoId: string | null = null;
 let activeEngine: Engine = "audio";
-let youtubeProgressTimer: ReturnType<typeof setInterval> | undefined;
 let currentQueue: string[] = [];
 let currentQueueIndex = -1;
+let progressTimer: ReturnType<typeof setInterval> | undefined;
 
 export function getCurrentTrackId(): string | null {
   return currentTrackId;
 }
 
-// --- iTunes 30s preview engine ---------------------------------------------
+export function getEngine(): Engine {
+  return activeEngine;
+}
+
+// --- Seeking ------------------------------------------------------------------
+// After a seek, engines keep reporting the old time for a moment while they
+// buffer. Report the target instead until they catch up, so the bar and the
+// notification move once, smoothly, instead of jumping back and forth.
+
+let pendingSeek: { target: number; until: number } | null = null;
+
+function settledPosition(actual: number): number {
+  if (!pendingSeek) return actual;
+  if (Math.abs(actual - pendingSeek.target) < 1.5 || Date.now() > pendingSeek.until) {
+    pendingSeek = null;
+    return actual;
+  }
+  return pendingSeek.target;
+}
+
+// --- iTunes 30s preview engine -------------------------------------------------
 
 const audio = new Audio();
 audio.preload = "none";
@@ -50,156 +59,146 @@ audio.addEventListener("pause", () => activeEngine === "audio" && onPlaybackPaus
 audio.addEventListener("ended", () => activeEngine === "audio" && onPlaybackEnded());
 audio.addEventListener("loadedmetadata", () => {
   if (activeEngine === "audio" && Number.isFinite(audio.duration)) {
-    playerTimeTotal.textContent = formatTime(audio.duration);
     bus.emit("durationchange", audio.duration);
+    emitProgress();
   }
 });
-audio.addEventListener("timeupdate", () => {
-  if (activeEngine !== "audio") return;
-  const duration = Number.isFinite(audio.duration) ? audio.duration : 30;
-  updateProgressUI(audio.currentTime, duration);
-});
+audio.addEventListener("timeupdate", () => activeEngine === "audio" && emitProgress());
 
-// --- YouTube full-track engine ----------------------------------------------
-//
-// Two YT.Player instances: the mini one in the player bar and a full-size one
-// in an overlay. Reparenting a live <iframe> reloads it in most WebViews (and
-// restarts playback), so expanding hands the position off between instances
-// instead. Only one of them is audible at a time.
+// --- YouTube full-track engine --------------------------------------------------
 
-let miniPlayer: YT.Player | null = null;
-let miniPlayerReady: Promise<YT.Player> | null = null;
-let expandedPlayer: YT.Player | null = null;
-let expandedPlayerReady: Promise<YT.Player> | null = null;
-let activeYoutubePlayer: YT.Player | null = null;
-let isVideoExpanded = false;
+let yt: YT.Player | null = null;
+let ytReady: Promise<YT.Player> | null = null;
+let lastReportedDuration = 0;
+let unmuteTimer: ReturnType<typeof setTimeout> | undefined;
 
-function createYoutubePlayer(el: HTMLElement, height: string, width: string): Promise<YT.Player> {
-  return loadYoutubeIframeApi().then(
+function getYoutubePlayer(): Promise<YT.Player> {
+  ytReady ??= loadYoutubeIframeApi().then(
     (YTApi) =>
       new Promise((resolve) => {
-        const player: YT.Player = new YTApi.Player(el, {
-          height,
-          width,
-          playerVars: { controls: 1, modestbranding: 1, playsinline: 1 },
+        const player: YT.Player = new YTApi.Player($("youtube-player"), {
+          height: "100%",
+          width: "100%",
+          playerVars: {
+            controls: 0, // our own controls
+            disablekb: 1,
+            fs: 0,
+            rel: 0,
+            playsinline: 1,
+            modestbranding: 1,
+            iv_load_policy: 3, // no annotations
+            cc_load_policy: 0, // no captions by default
+          },
           events: {
-            onReady: () => resolve(player),
+            onReady: () => resolve((yt = player)),
             onStateChange: onYoutubeStateChange,
           },
         });
       }),
   );
+  return ytReady;
 }
 
-function getMiniPlayer(): Promise<YT.Player> {
-  miniPlayerReady ??= createYoutubePlayer(youtubePlayerEl, "54", "96").then((p) => (miniPlayer = p));
-  return miniPlayerReady;
-}
-
-function getExpandedPlayer(): Promise<YT.Player> {
-  expandedPlayerReady ??= createYoutubePlayer(youtubePlayerExpandedEl, "100%", "100%").then(
-    (p) => (expandedPlayer = p),
-  );
-  return expandedPlayerReady;
+function hideCaptions(player: YT.Player): void {
+  // Undocumented but widely used; YouTube may still show captions if the
+  // viewer turned them on globally, so we also unload the module.
+  try {
+    player.unloadModule?.("captions");
+    player.unloadModule?.("cc");
+  } catch {
+    // older player builds
+  }
 }
 
 function onYoutubeStateChange(e: YT.OnStateChangeEvent): void {
-  if (activeEngine !== "youtube" || e.target !== activeYoutubePlayer) return;
+  if (activeEngine !== "youtube") return;
   const S = window.YT.PlayerState;
-  if (e.data === S.PLAYING) onPlaybackStarted();
-  else if (e.data === S.PAUSED) onPlaybackPaused();
-  else if (e.data === S.ENDED) onPlaybackEnded();
+  if (e.data === S.PLAYING) {
+    hideCaptions(e.target);
+    finishSeekMute();
+    onPlaybackStarted();
+  } else if (e.data === S.PAUSED) {
+    onPlaybackPaused();
+  } else if (e.data === S.ENDED) {
+    onPlaybackEnded();
+  }
 }
 
-let lastReportedDuration = 0;
-
-function startYoutubeProgressPolling(): void {
-  clearInterval(youtubeProgressTimer);
+function startProgressPolling(): void {
+  clearInterval(progressTimer);
   lastReportedDuration = 0;
-  youtubeProgressTimer = setInterval(() => {
-    if (activeEngine !== "youtube" || !activeYoutubePlayer?.getDuration) return;
-    const duration = activeYoutubePlayer.getDuration() || 0;
+  progressTimer = setInterval(() => {
+    if (activeEngine !== "youtube" || !yt?.getDuration) return;
+    const duration = yt.getDuration() || 0;
     if (duration > 0 && duration !== lastReportedDuration) {
       lastReportedDuration = duration;
       bus.emit("durationchange", duration);
     }
-    updateProgressUI(activeYoutubePlayer.getCurrentTime(), duration || 1);
+    emitProgress();
   }, 250);
 }
 
-async function expandVideo(): Promise<void> {
-  if (activeEngine !== "youtube" || !currentYoutubeVideoId || isVideoExpanded) return;
-  const resumeTime = miniPlayer?.getCurrentTime?.() || 0;
-  miniPlayer?.pauseVideo?.();
-
-  videoOverlayName.textContent = playerName.textContent;
-  videoOverlayArtist.textContent = playerArtist.textContent;
-  videoOverlay.style.display = "flex";
-  isVideoExpanded = true;
-
-  const player = await getExpandedPlayer();
-  if (!isVideoExpanded) return; // collapsed again before it finished loading
-  activeYoutubePlayer = player;
-  player.loadVideoById(currentYoutubeVideoId, resumeTime);
-  player.playVideo();
+/** Mute across a YouTube seek so its buffering stutter isn't heard. */
+function startSeekMute(): void {
+  if (!yt) return;
+  yt.mute();
+  clearTimeout(unmuteTimer);
+  unmuteTimer = setTimeout(finishSeekMute, 1200); // safety net
 }
 
-function collapseVideo(): void {
-  if (!isVideoExpanded) return;
-  isVideoExpanded = false;
-  const resumeTime = expandedPlayer?.getCurrentTime?.() || 0;
-  expandedPlayer?.pauseVideo?.();
-  videoOverlay.style.display = "none";
-  activeYoutubePlayer = miniPlayer;
-  if (miniPlayer) {
-    miniPlayer.seekTo(resumeTime, true);
-    miniPlayer.playVideo();
-  }
+function finishSeekMute(): void {
+  clearTimeout(unmuteTimer);
+  unmuteTimer = undefined;
+  if (yt?.isMuted?.()) yt.unMute();
 }
 
-// --- Shared player-bar UI ----------------------------------------------------
+// --- Shared state -------------------------------------------------------------
 
-function setOverlayIcons(id: string, playing: boolean): void {
-  const sel = cssEscape(id);
-  document
-    .querySelectorAll(`.play-overlay[data-id="${sel}"], .playlist-row-play[data-id="${sel}"]`)
-    .forEach((btn) => {
-      btn.textContent = playing ? "⏸" : "▶";
-      btn.setAttribute("aria-label", playing ? "Pause" : "Play");
-      btn.classList.toggle("is-playing", playing);
-    });
+function getRawPosition(): number {
+  if (activeEngine === "youtube") return yt?.getCurrentTime?.() || 0;
+  return audio.currentTime || 0;
+}
+
+export function getPosition(): number {
+  return settledPosition(getRawPosition());
+}
+
+export function getDuration(): number {
+  if (activeEngine === "youtube") return yt?.getDuration?.() || 0;
+  return Number.isFinite(audio.duration) ? audio.duration : 0;
+}
+
+function emitProgress(): void {
+  const duration = getDuration();
+  bus.emit("progress", { currentTime: getPosition(), duration: duration || 30 });
 }
 
 function onPlaybackStarted(): void {
-  playerToggle.textContent = "⏸";
-  playerToggle.setAttribute("aria-label", "Pause");
-  if (currentTrackId) setOverlayIcons(currentTrackId, true);
   bus.emit("playstate", true);
 }
 
 function onPlaybackPaused(): void {
-  playerToggle.textContent = "▶";
-  playerToggle.setAttribute("aria-label", "Play");
-  if (currentTrackId) setOverlayIcons(currentTrackId, false);
   bus.emit("playstate", false);
 }
 
 function onPlaybackEnded(): void {
   onPlaybackPaused();
-  clearInterval(youtubeProgressTimer);
-  playerBarFill.style.width = "0%";
-  playerTimeElapsed.textContent = "0:00";
   void playNextInQueue();
 }
 
-function updateProgressUI(currentTime: number, duration: number): void {
-  playerBarFill.style.width = `${Math.min(100, (currentTime / duration) * 100)}%`;
-  playerTimeElapsed.textContent = formatTime(currentTime);
-  playerTimeTotal.textContent = formatTime(duration);
-  bus.emit("progress", { currentTime, duration });
+export function isTrackPlaying(id: string): boolean {
+  if (currentTrackId !== id) return false;
+  if (activeEngine === "youtube") {
+    return yt?.getPlayerState?.() === window.YT?.PlayerState?.PLAYING;
+  }
+  return !audio.paused;
 }
 
-// --- Queue -------------------------------------------------------------------
+export function isPlaying(): boolean {
+  return currentTrackId ? isTrackPlaying(currentTrackId) : false;
+}
+
+// --- Queue --------------------------------------------------------------------
 // Autoplay continues through whichever grid or playlist the current track was
 // started from, in the order it appears there.
 
@@ -220,15 +219,12 @@ export function queueFromElement(el: HTMLElement): void {
 }
 
 const hasNext = () => currentQueueIndex >= 0 && currentQueueIndex < currentQueue.length - 1;
-const hasPrevious = () => currentQueueIndex > 0;
 
 async function playQueueIndex(index: number): Promise<void> {
   const id = currentQueue[index];
   if (!id) return;
   currentQueueIndex = index;
-  const wasExpanded = isVideoExpanded;
   await playTrack(id);
-  if (wasExpanded && activeEngine === "youtube") void expandVideo();
 }
 
 async function playNextInQueue(): Promise<void> {
@@ -241,32 +237,21 @@ export async function playNext(): Promise<void> {
 
 /** Like every music app: restart the song if past 3s, else go back one. */
 export async function playPrevious(): Promise<void> {
-  if (getPosition() > 3 || !hasPrevious()) {
+  if (getPosition() > 3 || currentQueueIndex <= 0) {
     seekTo(0);
     return;
   }
   await playQueueIndex(currentQueueIndex - 1);
 }
 
-// --- Public controls ---------------------------------------------------------
-
-export function isTrackPlaying(id: string): boolean {
-  if (currentTrackId !== id) return false;
-  if (activeEngine === "youtube") {
-    return activeYoutubePlayer?.getPlayerState?.() === window.YT?.PlayerState?.PLAYING;
-  }
-  return !audio.paused;
-}
+// --- Public controls ----------------------------------------------------------
 
 function stopActiveEngine(): void {
   audio.pause();
-  clearInterval(youtubeProgressTimer);
-  miniPlayer?.pauseVideo?.();
-  expandedPlayer?.pauseVideo?.();
-  if (isVideoExpanded) {
-    isVideoExpanded = false;
-    videoOverlay.style.display = "none";
-  }
+  clearInterval(progressTimer);
+  finishSeekMute();
+  pendingSeek = null;
+  yt?.pauseVideo?.();
 }
 
 export async function playTrack(id: string): Promise<void> {
@@ -280,18 +265,11 @@ export async function playTrack(id: string): Promise<void> {
   }
 
   stopActiveEngine();
-  if (currentTrackId) setOverlayIcons(currentTrackId, false);
+  const previousId = currentTrackId;
   currentTrackId = id;
-
-  playerBar.style.display = "flex";
-  document.body.classList.add("has-player");
-  playerName.textContent = item.name || "";
-  playerArtist.textContent = item.subtitle || "";
-  updateBackgroundArt(item.artwork);
-  playerBarFill.style.width = "0%";
-  playerTimeElapsed.textContent = "0:00";
-  playerTimeTotal.textContent = "0:30";
+  if (previousId) bus.emit("playstate", false);
   bus.emit("trackchange", item);
+  emitProgressReset();
 
   let youtubeId: string | null = null;
   if (getYoutubeApiKey()) {
@@ -305,22 +283,14 @@ export async function playTrack(id: string): Promise<void> {
   if (currentTrackId !== id) return; // superseded by another click meanwhile
 
   if (youtubeId) {
-    activeEngine = "youtube";
-    currentYoutubeVideoId = youtubeId;
-    playerArt.style.display = "none";
-    youtubePlayerWrapEl.style.display = "block";
-    const player = await getMiniPlayer();
+    setEngine("youtube");
+    const player = await getYoutubePlayer();
     if (currentTrackId !== id) return;
-    activeYoutubePlayer = player;
     player.loadVideoById(youtubeId);
     player.playVideo();
-    startYoutubeProgressPolling();
+    startProgressPolling();
   } else if (item.previewUrl) {
-    activeEngine = "audio";
-    currentYoutubeVideoId = null;
-    youtubePlayerWrapEl.style.display = "none";
-    playerArt.style.display = "block";
-    playerArt.src = item.artwork || "";
+    setEngine("audio");
     audio.src = item.previewUrl;
     audio.currentTime = 0;
     audio.play().catch(() => onPlaybackPaused());
@@ -329,43 +299,64 @@ export async function playTrack(id: string): Promise<void> {
   }
 }
 
-function getPosition(): number {
-  if (activeEngine === "youtube") return activeYoutubePlayer?.getCurrentTime?.() || 0;
-  return audio.currentTime || 0;
+function emitProgressReset(): void {
+  bus.emit("progress", { currentTime: 0, duration: 0 });
 }
 
-function getDuration(): number {
-  if (activeEngine === "youtube") return activeYoutubePlayer?.getDuration?.() || 0;
-  return Number.isFinite(audio.duration) ? audio.duration : 0;
+function setEngine(engine: Engine): void {
+  activeEngine = engine;
+  bus.emit("enginechange", engine);
+}
+
+export function togglePlayback(): void {
+  if (activeEngine === "youtube" && yt) {
+    if (yt.getPlayerState() === window.YT.PlayerState.PLAYING) yt.pauseVideo();
+    else yt.playVideo();
+  } else if (audio.paused) {
+    audio.play().catch(() => onPlaybackPaused());
+  } else {
+    audio.pause();
+  }
+}
+
+export function play(): void {
+  if (currentTrackId && !isPlaying()) togglePlayback();
+}
+
+export function pause(): void {
+  if (currentTrackId && isPlaying()) togglePlayback();
 }
 
 export function seekTo(seconds: number): void {
   if (!currentTrackId) return;
-  const target = Math.max(0, seconds);
-  if (activeEngine === "youtube" && activeYoutubePlayer) {
-    activeYoutubePlayer.seekTo(target, true);
+  const duration = getDuration();
+  const target = Math.max(0, duration > 0 ? Math.min(seconds, duration - 0.25) : seconds);
+  if (activeEngine === "youtube" && yt) {
+    if (isPlaying()) startSeekMute();
+    yt.seekTo(target, true);
   } else if (Number.isFinite(audio.duration)) {
-    audio.currentTime = Math.min(target, audio.duration);
+    audio.currentTime = target;
   } else {
     return;
   }
+  pendingSeek = { target, until: Date.now() + 4000 };
+  emitProgress();
   bus.emit("seeked", undefined);
 }
 
-export function play(): void {
-  if (currentTrackId && !isTrackPlaying(currentTrackId)) togglePlayback();
-}
-
-export function pause(): void {
-  if (currentTrackId && isTrackPlaying(currentTrackId)) togglePlayback();
-}
-
 /** Everything the notification / media keys need to show. */
-export function getSnapshot() {
+export function getSnapshot(): {
+  item: Item | undefined;
+  playing: boolean;
+  position: number;
+  duration: number;
+  hasNext: boolean;
+  hasPrevious: boolean;
+} {
   const item = currentTrackId ? trackRegistry.get(currentTrackId) : undefined;
   return {
     item,
-    playing: currentTrackId ? isTrackPlaying(currentTrackId) : false,
+    playing: isPlaying(),
     position: getPosition(),
     duration: getDuration(),
     hasNext: hasNext(),
@@ -374,36 +365,15 @@ export function getSnapshot() {
   };
 }
 
-export function togglePlayback(): void {
-  if (activeEngine === "youtube" && activeYoutubePlayer) {
-    if (activeYoutubePlayer.getPlayerState() === window.YT.PlayerState.PLAYING) {
-      activeYoutubePlayer.pauseVideo();
-    } else {
-      activeYoutubePlayer.playVideo();
-    }
-  } else if (audio.paused) {
-    audio.play().catch(() => onPlaybackPaused());
-  } else {
-    audio.pause();
-  }
-}
-
 export function initPlayer(): void {
-  videoExpandBtn.addEventListener("click", () => void expandVideo());
-  videoCollapseBtn.addEventListener("click", collapseVideo);
-
-  playerToggle.addEventListener("click", () => {
-    if (currentTrackId) togglePlayback();
-  });
-
-  $("player-prev").addEventListener("click", () => void playPrevious());
-  $("player-next").addEventListener("click", () => void playNext());
-
-  playerBarTrack.addEventListener("click", (e) => {
-    if (!currentTrackId) return;
-    const rect = playerBarTrack.getBoundingClientRect();
-    const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-    seekTo(ratio * getDuration());
+  // Play buttons are re-created on every render, so delegate from document.
+  document.addEventListener("click", (e) => {
+    const btn = (e.target as Element).closest<HTMLElement>(".play-overlay, .playlist-row-play");
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    queueFromElement(btn);
+    void playTrack(btn.dataset.id!);
   });
 
   // Keyboard on laptop: Space = play/pause, Shift+←/→ = previous/next.
@@ -418,15 +388,5 @@ export function initPlayer(): void {
     } else if (e.shiftKey && e.code === "ArrowLeft") {
       void playPrevious();
     }
-  });
-
-  // Play buttons are re-created on every render, so delegate from document.
-  document.addEventListener("click", (e) => {
-    const btn = (e.target as Element).closest<HTMLElement>(".play-overlay, .playlist-row-play");
-    if (!btn) return;
-    e.preventDefault();
-    e.stopPropagation();
-    queueFromElement(btn);
-    void playTrack(btn.dataset.id!);
   });
 }

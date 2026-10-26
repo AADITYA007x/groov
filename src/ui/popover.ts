@@ -11,7 +11,7 @@ function close(): void {
   popover.innerHTML = "";
 }
 
-function open(trackId: string, anchorEl: HTMLElement): void {
+export function openAddToPlaylist(trackId: string, anchorEl: HTMLElement): void {
   const item = trackRegistry.get(trackId);
   if (!item) return;
   const playlists = getPlaylists();
@@ -65,7 +65,7 @@ export function initPopover(): void {
     if (addBtn) {
       e.preventDefault();
       e.stopPropagation();
-      open(addBtn.dataset.id!, addBtn);
+      openAddToPlaylist(addBtn.dataset.id!, addBtn);
       return;
     }
     if (popover.style.display !== "none" && !popover.contains(target)) close();

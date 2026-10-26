@@ -45,7 +45,7 @@ async function load(item: Item): Promise<void> {
   render();
 }
 
-function open(): void {
+export function openLyrics(): void {
   const id = getCurrentTrackId();
   const item = id ? trackRegistry.get(id) : undefined;
   if (!item) return;
@@ -76,7 +76,7 @@ function highlight(currentTime: number): void {
 }
 
 export function initLyrics(): void {
-  toggleBtn.addEventListener("click", open);
+  toggleBtn.addEventListener("click", openLyrics);
   closeBtn.addEventListener("click", close);
   bus.on("trackchange", (item) => {
     currentLyrics = null;

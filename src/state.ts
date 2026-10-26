@@ -1,4 +1,5 @@
 import type { Item } from "./types";
+import type { Engine } from "./player/player";
 import { createEmitter } from "./utils";
 
 /** Every track rendered anywhere, by id, so play buttons can look them up. */
@@ -19,6 +20,8 @@ export const bus = createEmitter<{
   seeked: void;
   /** The current track's length became known (seconds). */
   durationchange: number;
+  /** Switched between the 30s preview and the YouTube player. */
+  enginechange: Engine;
   /** Playlists were created, edited or deleted. */
   playlistschange: void;
 }>();

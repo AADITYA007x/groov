@@ -33,6 +33,11 @@ declare namespace YT {
     getCurrentTime(): number;
     getDuration(): number;
     getPlayerState(): PlayerState;
+    mute(): void;
+    unMute(): void;
+    isMuted(): boolean;
+    /** Undocumented; used to switch off captions. */
+    unloadModule?(name: string): void;
   }
 }
 

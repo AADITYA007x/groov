@@ -116,17 +116,13 @@
 
     <footer id="player-bar" class="player-bar" style="display: none">
       <button id="lyrics-toggle-btn" class="lyrics-toggle-btn" aria-label="Show lyrics">Aa</button>
-      <div class="player-track">
+      <button id="player-open" class="player-track" aria-label="Open Now Playing">
         <img id="player-art" class="player-art" src="" alt="" />
-        <div id="youtube-player-wrap" class="player-video-wrap" style="display: none">
-          <div id="youtube-player" class="player-art player-video"></div>
-          <button id="video-expand-btn" class="video-expand-btn" aria-label="Expand video">⤢</button>
-        </div>
-        <div>
-          <div id="player-name" class="player-name"></div>
-          <div id="player-artist" class="player-subtitle"></div>
-        </div>
-      </div>
+        <span class="player-meta">
+          <span id="player-name" class="player-name"></span>
+          <span id="player-artist" class="player-subtitle"></span>
+        </span>
+      </button>
       <div class="player-controls">
         <div class="player-buttons">
           <button id="player-prev" class="player-skip-btn" aria-label="Previous">⏮</button>
@@ -135,24 +131,52 @@
         </div>
         <div class="player-progress">
           <span id="player-time-elapsed" class="player-time">0:00</span>
-          <div class="player-bar-track">
-            <div id="player-bar-fill" class="player-bar-fill"></div>
+          <div id="player-seek" class="seekbar" role="slider" aria-label="Seek" tabindex="0">
+            <div class="seekbar-rail"><div class="seekbar-fill"></div></div>
+            <div class="seekbar-thumb"></div>
           </div>
-          <span id="player-time-total" class="player-time">0:30</span>
+          <span id="player-time-total" class="player-time">0:00</span>
         </div>
       </div>
     </footer>
 
-    <div id="video-overlay" class="video-overlay" style="display: none">
-      <div class="video-overlay-frame">
-        <div id="youtube-player-expanded"></div>
-        <button id="video-collapse" class="video-collapse-btn" aria-label="Minimize video">⌄</button>
-      </div>
-      <div class="video-overlay-meta">
-        <div id="video-overlay-name" class="video-overlay-name"></div>
-        <div id="video-overlay-artist" class="video-overlay-artist"></div>
+    <div id="now-playing" class="now-playing" style="display: none" aria-label="Now playing">
+      <div id="np-bg" class="np-bg"></div>
+      <div class="np-inner">
+        <header class="np-top">
+          <button id="np-close" class="np-icon-btn" aria-label="Close">⌄</button>
+          <div class="np-label">Now playing</div>
+          <button id="np-video" class="np-icon-btn np-video-btn" aria-label="Show video" title="Show video">🎬</button>
+        </header>
+        <div id="np-art-slot" class="np-art-slot">
+          <img id="np-art" class="np-art" src="" alt="" />
+        </div>
+        <div class="np-meta">
+          <div id="np-title" class="np-title"></div>
+          <div id="np-artist" class="np-artist"></div>
+        </div>
+        <div class="np-progress">
+          <div id="np-seek" class="seekbar seekbar-lg" role="slider" aria-label="Seek" tabindex="0">
+            <div class="seekbar-rail"><div class="seekbar-fill"></div></div>
+            <div class="seekbar-thumb"></div>
+          </div>
+          <div class="np-times"><span id="np-elapsed">0:00</span><span id="np-total">0:00</span></div>
+        </div>
+        <div class="np-controls">
+          <button id="np-prev" class="np-skip" aria-label="Previous">⏮</button>
+          <button id="np-toggle" class="np-play" aria-label="Play">▶</button>
+          <button id="np-next" class="np-skip" aria-label="Next">⏭</button>
+        </div>
+        <div class="np-extra">
+          <button id="np-lyrics" class="np-pill">Lyrics</button>
+          <button id="np-add" class="np-pill">+ Add to playlist</button>
+        </div>
       </div>
     </div>
+
+    <!-- The one YouTube player. Invisible unless "Show video" is on; CSS
+         positions it, the DOM never moves (that would restart the song). -->
+    <div id="yt-host" class="yt-host"><div id="youtube-player"></div></div>
 
     <div id="lyrics-overlay" class="lyrics-overlay" style="display: none">
       <div class="lyrics-panel">
