@@ -1218,3 +1218,27 @@ body.has-player .lyrics-toggle-btn {
     padding-bottom: 160px;
   }
 }
+
+/* --- Settings (sidebar) --------------------------------------------------- */
+
+.sidebar-setting {
+  width: 100%;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  color: var(--text);
+  font-size: 13px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.sidebar-setting:hover {
+  border-color: var(--accent-2);
+}
+
+.sidebar-version {
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 8px 12px 0;
+}

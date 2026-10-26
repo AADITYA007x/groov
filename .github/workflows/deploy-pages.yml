@@ -1,5 +1,6 @@
-name: Deploy to GitHub Pages
+name: Deploy web app to GitHub Pages
 
+# The laptop/browser version of Groov. Same code as the APK, built with Vite.
 on:
   push:
     branches: [main]
@@ -24,19 +25,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Use a placeholder config.js if none is committed
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Build
         run: |
-          if [ ! -f www/config.js ]; then
-            cp www/config.example.js www/config.js
-          fi
+          npm ci
+          npm run build
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload www/ as the Pages artifact
+      - name: Upload dist/ as the Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: www
+          path: dist
 
       - name: Deploy to GitHub Pages
         id: deployment

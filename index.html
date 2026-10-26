@@ -2,9 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Search</title>
-    <link rel="stylesheet" href="style.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#15082e" />
+    <title>Groov</title>
   </head>
   <body>
     <div class="bg-blur" id="bg-blur"></div>
@@ -27,6 +27,12 @@
           <span>Theme</span>
         </div>
         <div id="theme-swatches" class="theme-swatches"></div>
+
+        <div class="sidebar-header">
+          <span>Settings</span>
+        </div>
+        <button id="youtube-key-btn" class="sidebar-setting"></button>
+        <div id="app-version" class="sidebar-version"></div>
       </aside>
 
       <div class="main-panel">
@@ -154,8 +160,6 @@
       </div>
     </div>
 
-    <script src="config.js"></script>
-    <script src="data.js"></script>
-    <script src="script.js"></script>
+    <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
