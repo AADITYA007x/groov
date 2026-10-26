@@ -17,6 +17,8 @@ export const bus = createEmitter<{
   progress: { currentTime: number; duration: number };
   /** The user jumped to a new position. */
   seeked: void;
+  /** The current track's length became known (seconds). */
+  durationchange: number;
   /** Playlists were created, edited or deleted. */
   playlistschange: void;
 }>();

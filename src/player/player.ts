@@ -51,6 +51,7 @@ audio.addEventListener("ended", () => activeEngine === "audio" && onPlaybackEnde
 audio.addEventListener("loadedmetadata", () => {
   if (activeEngine === "audio" && Number.isFinite(audio.duration)) {
     playerTimeTotal.textContent = formatTime(audio.duration);
+    bus.emit("durationchange", audio.duration);
   }
 });
 audio.addEventListener("timeupdate", () => {
@@ -110,12 +111,19 @@ function onYoutubeStateChange(e: YT.OnStateChangeEvent): void {
   else if (e.data === S.ENDED) onPlaybackEnded();
 }
 
+let lastReportedDuration = 0;
+
 function startYoutubeProgressPolling(): void {
   clearInterval(youtubeProgressTimer);
+  lastReportedDuration = 0;
   youtubeProgressTimer = setInterval(() => {
     if (activeEngine !== "youtube" || !activeYoutubePlayer?.getDuration) return;
-    const duration = activeYoutubePlayer.getDuration() || 1;
-    updateProgressUI(activeYoutubePlayer.getCurrentTime(), duration);
+    const duration = activeYoutubePlayer.getDuration() || 0;
+    if (duration > 0 && duration !== lastReportedDuration) {
+      lastReportedDuration = duration;
+      bus.emit("durationchange", duration);
+    }
+    updateProgressUI(activeYoutubePlayer.getCurrentTime(), duration || 1);
   }, 250);
 }
 
@@ -361,7 +369,8 @@ export function getSnapshot() {
     position: getPosition(),
     duration: getDuration(),
     hasNext: hasNext(),
-    hasPrevious: hasPrevious(),
+    // Always offered: on the first song it restarts the track.
+    hasPrevious: Boolean(item),
   };
 }
 
