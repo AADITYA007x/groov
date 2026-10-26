@@ -211,14 +211,33 @@ export function queueFromElement(el: HTMLElement): void {
   setQueue(ids, id);
 }
 
-async function playNextInQueue(): Promise<void> {
-  if (currentQueueIndex < 0 || currentQueueIndex >= currentQueue.length - 1) return;
-  currentQueueIndex += 1;
-  const nextId = currentQueue[currentQueueIndex];
-  if (!nextId) return;
+const hasNext = () => currentQueueIndex >= 0 && currentQueueIndex < currentQueue.length - 1;
+const hasPrevious = () => currentQueueIndex > 0;
+
+async function playQueueIndex(index: number): Promise<void> {
+  const id = currentQueue[index];
+  if (!id) return;
+  currentQueueIndex = index;
   const wasExpanded = isVideoExpanded;
-  await playTrack(nextId);
+  await playTrack(id);
   if (wasExpanded && activeEngine === "youtube") void expandVideo();
+}
+
+async function playNextInQueue(): Promise<void> {
+  if (hasNext()) await playQueueIndex(currentQueueIndex + 1);
+}
+
+export async function playNext(): Promise<void> {
+  await playNextInQueue();
+}
+
+/** Like every music app: restart the song if past 3s, else go back one. */
+export async function playPrevious(): Promise<void> {
+  if (getPosition() > 3 || !hasPrevious()) {
+    seekTo(0);
+    return;
+  }
+  await playQueueIndex(currentQueueIndex - 1);
 }
 
 // --- Public controls ---------------------------------------------------------
@@ -302,6 +321,50 @@ export async function playTrack(id: string): Promise<void> {
   }
 }
 
+function getPosition(): number {
+  if (activeEngine === "youtube") return activeYoutubePlayer?.getCurrentTime?.() || 0;
+  return audio.currentTime || 0;
+}
+
+function getDuration(): number {
+  if (activeEngine === "youtube") return activeYoutubePlayer?.getDuration?.() || 0;
+  return Number.isFinite(audio.duration) ? audio.duration : 0;
+}
+
+export function seekTo(seconds: number): void {
+  if (!currentTrackId) return;
+  const target = Math.max(0, seconds);
+  if (activeEngine === "youtube" && activeYoutubePlayer) {
+    activeYoutubePlayer.seekTo(target, true);
+  } else if (Number.isFinite(audio.duration)) {
+    audio.currentTime = Math.min(target, audio.duration);
+  } else {
+    return;
+  }
+  bus.emit("seeked", undefined);
+}
+
+export function play(): void {
+  if (currentTrackId && !isTrackPlaying(currentTrackId)) togglePlayback();
+}
+
+export function pause(): void {
+  if (currentTrackId && isTrackPlaying(currentTrackId)) togglePlayback();
+}
+
+/** Everything the notification / media keys need to show. */
+export function getSnapshot() {
+  const item = currentTrackId ? trackRegistry.get(currentTrackId) : undefined;
+  return {
+    item,
+    playing: currentTrackId ? isTrackPlaying(currentTrackId) : false,
+    position: getPosition(),
+    duration: getDuration(),
+    hasNext: hasNext(),
+    hasPrevious: hasPrevious(),
+  };
+}
+
 export function togglePlayback(): void {
   if (activeEngine === "youtube" && activeYoutubePlayer) {
     if (activeYoutubePlayer.getPlayerState() === window.YT.PlayerState.PLAYING) {
@@ -324,14 +387,27 @@ export function initPlayer(): void {
     if (currentTrackId) togglePlayback();
   });
 
+  $("player-prev").addEventListener("click", () => void playPrevious());
+  $("player-next").addEventListener("click", () => void playNext());
+
   playerBarTrack.addEventListener("click", (e) => {
     if (!currentTrackId) return;
     const rect = playerBarTrack.getBoundingClientRect();
     const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-    if (activeEngine === "youtube" && activeYoutubePlayer) {
-      activeYoutubePlayer.seekTo(ratio * activeYoutubePlayer.getDuration(), true);
-    } else if (Number.isFinite(audio.duration)) {
-      audio.currentTime = ratio * audio.duration;
+    seekTo(ratio * getDuration());
+  });
+
+  // Keyboard on laptop: Space = play/pause, Shift+←/→ = previous/next.
+  document.addEventListener("keydown", (e) => {
+    const target = e.target as HTMLElement;
+    if (!currentTrackId || target.closest("input, textarea, [contenteditable]")) return;
+    if (e.code === "Space") {
+      e.preventDefault();
+      togglePlayback();
+    } else if (e.shiftKey && e.code === "ArrowRight") {
+      void playNext();
+    } else if (e.shiftKey && e.code === "ArrowLeft") {
+      void playPrevious();
     }
   });
 

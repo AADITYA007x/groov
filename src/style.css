@@ -1242,3 +1242,35 @@ body.has-player .lyrics-toggle-btn {
   font-size: 12px;
   padding: 8px 12px 0;
 }
+
+/* --- Previous / next ------------------------------------------------------ */
+
+.player-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.player-skip-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.player-skip-btn:hover {
+  color: var(--text);
+  background: var(--glass-bg);
+}
+
+.sidebar-setting + .sidebar-setting {
+  margin-top: 6px;
+}

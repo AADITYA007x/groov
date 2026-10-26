@@ -15,6 +15,8 @@ export const bus = createEmitter<{
   /** Playback started (true) or paused/stopped (false). */
   playstate: boolean;
   progress: { currentTime: number; duration: number };
+  /** The user jumped to a new position. */
+  seeked: void;
   /** Playlists were created, edited or deleted. */
   playlistschange: void;
 }>();

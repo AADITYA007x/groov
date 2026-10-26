@@ -1,5 +1,6 @@
 import "./style.css";
 import { initLyrics } from "./player/lyrics";
+import { initMediaControls } from "./player/media-controls";
 import { initPlayer } from "./player/player";
 import { initLayout } from "./ui/layout";
 import { initPopover } from "./ui/popover";
@@ -13,6 +14,7 @@ import { initViews } from "./ui/views";
 initLayout();
 initTheme();
 initPlayer();
+initMediaControls();
 initLyrics();
 initPopover();
 initViews();
