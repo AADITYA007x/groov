@@ -37,6 +37,7 @@ const npElapsed = $("np-elapsed");
 const npTotal = $("np-total");
 const npToggle = $("np-toggle");
 const npVideoBtn = $("np-video");
+const npLabel = document.querySelector<HTMLElement>(".np-label")!;
 const ytHost = $("yt-host");
 
 let currentItem: Item | null = null;
@@ -134,8 +135,16 @@ function setVideoMode(on: boolean): void {
   else ytHost.removeAttribute("style");
 }
 
+const ENGINE_LABELS = {
+  native: "Full song",
+  youtube: "Full song · YouTube",
+  audio: "30s preview",
+} as const;
+
 function renderEngine(): void {
-  const yt = getEngine() === "youtube";
+  const engine = getEngine();
+  npLabel.textContent = currentItem ? `Now playing · ${ENGINE_LABELS[engine]}` : "Now playing";
+  const yt = engine === "youtube";
   npVideoBtn.style.visibility = yt ? "visible" : "hidden";
   if (!yt && videoMode) setVideoMode(false);
 }
@@ -194,6 +203,11 @@ export function initNowPlaying(): void {
   bus.on("playstate", (playing) => renderPlayState(playing));
   bus.on("progress", ({ currentTime, duration }) => renderProgress(currentTime, duration));
   bus.on("enginechange", renderEngine);
+  bus.on("loading", (loading) => {
+    for (const btn of [barToggle, npToggle]) btn.classList.toggle("is-loading", loading);
+    if (loading) npLabel.textContent = "Finding the full song…";
+    else renderEngine();
+  });
 
   // Cards re-render often; keep their play icons in sync.
   bus.on("playlistschange", () => renderPlayState(isPlaying()));

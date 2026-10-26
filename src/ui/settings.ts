@@ -3,6 +3,7 @@
 import { getYoutubeApiKey, hasCustomYoutubeKey, setYoutubeApiKey } from "../config";
 import { isBackgroundPlayAllowed, isNativeApp, openBackgroundPlaySettings } from "../player/media-controls";
 import { $ } from "../utils";
+import { hasNativeAudio } from "../player/native-audio";
 
 const keyBtn = $("youtube-key-btn");
 const backgroundBtn = $("background-play-btn");
@@ -10,6 +11,11 @@ const versionEl = $("app-version");
 
 function renderKeyStatus(): void {
   const key = getYoutubeApiKey();
+  if (hasNativeAudio) {
+    // Full songs are built in on Android; the key is only a fallback.
+    keyBtn.textContent = key ? "Backup YouTube key: set ✓" : "Backup YouTube key: none (optional)";
+    return;
+  }
   const source = hasCustomYoutubeKey() ? "your key" : "built-in key";
   keyBtn.textContent = key ? `YouTube: full songs (${source})` : "YouTube: add key for full songs";
 }

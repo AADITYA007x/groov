@@ -32,6 +32,7 @@ interface ITunesRaw {
   artistLinkUrl?: string;
   primaryGenreName?: string;
   releaseDate?: string;
+  trackTimeMillis?: number;
 }
 
 export function normalizeResult(raw: ITunesRaw, category: Category): Item {
@@ -46,6 +47,7 @@ export function normalizeResult(raw: ITunesRaw, category: Category): Item {
       topSubtitle: `Song · ${raw.artistName ?? ""}`,
       artistId: raw.artistId,
       genre: raw.primaryGenreName,
+      durationMs: raw.trackTimeMillis,
     };
   }
   if (category === "albums") {

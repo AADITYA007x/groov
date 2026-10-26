@@ -11,6 +11,8 @@ export interface Item {
   topSubtitle: string;
   artistId?: number;
   genre?: string;
+  /** Track length from the catalog; helps pick the right YouTube version. */
+  durationMs?: number;
 }
 
 export interface Playlist {

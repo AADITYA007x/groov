@@ -1596,3 +1596,28 @@ body.np-open {
 .player-time {
   font-variant-numeric: tabular-nums;
 }
+
+/* --- Loading (finding / downloading the full song) ------------------------ */
+
+.player-play-btn.is-loading,
+.np-play.is-loading {
+  position: relative;
+  color: transparent;
+}
+
+.player-play-btn.is-loading::after,
+.np-play.is-loading::after {
+  content: "";
+  position: absolute;
+  inset: 28%;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  animation: groov-spin 0.8s linear infinite;
+}
+
+@keyframes groov-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

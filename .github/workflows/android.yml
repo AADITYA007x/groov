@@ -62,8 +62,18 @@ jobs:
           GROOV_KEY_ALIAS: groov
           GROOV_KEY_PASSWORD: ${{ secrets.GROOV_KEYSTORE_PASSWORD }}
         run: |
+          set -o pipefail
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleRelease --no-daemon 2>&1 | tee "$RUNNER_TEMP/gradle.log"
+
+      - name: Report build errors
+        if: failure()
+        run: |
+          # Surface compiler/Gradle errors as one annotation, readable on the run page.
+          LOG="$RUNNER_TEMP/gradle.log"
+          [ -f "$LOG" ] || exit 0
+          MSG=$(grep -E "error:|e: |What went wrong|Could not (resolve|find)|> " "$LOG" | grep -v "^> Task" | head -40 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          echo "::error title=Gradle build failed::${MSG}"
 
       - name: Name the APK
         id: apk

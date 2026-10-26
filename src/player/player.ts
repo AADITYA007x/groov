@@ -1,11 +1,13 @@
 // Playback engines + queue. No layout here: the player bar and the Now
 // Playing screen (ui/now-playing.ts) render from the events this emits.
 //
-// Two interchangeable engines behind one interface:
-//  - "audio":   the free, always-available 30s iTunes preview clip.
+// Three interchangeable engines behind one interface, tried in this order:
+//  - "native":  Android only. Full songs from YouTube Music, no key, played
+//               by ExoPlayer and cached on the phone (see NativeAudioPlugin).
 //  - "youtube": full length via ONE hidden YouTube IFrame player, used when a
-//               YouTube key is set and a match is found. Falls back to
-//               "audio" on any failure (no key, quota, no match, network).
+//               YouTube key is set and a match is found.
+//  - "audio":   the free, always-available 30s iTunes preview clip.
+// Each one falls back to the next on any failure.
 //
 // The YouTube iframe lives in #yt-host. It's invisible by default (the UI
 // shows album art); the Now Playing screen can lay it over its artwork
@@ -16,8 +18,9 @@ import { findYoutubeVideoId, loadYoutubeIframeApi } from "../api/youtube";
 import { bus, trackRegistry } from "../state";
 import type { Item } from "../types";
 import { $ } from "../utils";
+import { hasNativeAudio, nativeAudio, toNativeTrack } from "./native-audio";
 
-export type Engine = "audio" | "youtube";
+export type Engine = "audio" | "youtube" | "native";
 
 let currentTrackId: string | null = null;
 let activeEngine: Engine = "audio";
@@ -152,9 +155,63 @@ function finishSeekMute(): void {
   if (yt?.isMuted?.()) yt.unMute();
 }
 
+// --- Native engine (Android) --------------------------------------------------------
+// Position arrives every 500ms; interpolate between updates.
+
+let nativePlaying = false;
+let nativePosition = 0;
+let nativePositionAt = 0;
+let nativeDuration = 0;
+
+function initNativeEngine(): void {
+  if (!hasNativeAudio) return;
+  void nativeAudio.addListener("state", ({ playing }) => {
+    if (activeEngine !== "native") return;
+    nativePlaying = playing;
+    nativePositionAt = Date.now();
+    if (playing) onPlaybackStarted();
+    else onPlaybackPaused();
+  });
+  void nativeAudio.addListener("progress", ({ position, duration }) => {
+    if (activeEngine !== "native") return;
+    nativePosition = position;
+    nativePositionAt = Date.now();
+    if (duration > 0 && duration !== nativeDuration) {
+      nativeDuration = duration;
+      bus.emit("durationchange", duration);
+    }
+    emitProgress();
+  });
+  void nativeAudio.addListener("ended", () => {
+    if (activeEngine !== "native") return;
+    nativePlaying = false;
+    onPlaybackEnded();
+  });
+  void nativeAudio.addListener("error", ({ message }) => {
+    if (activeEngine !== "native") return;
+    console.warn("Native playback error:", message);
+    nativePlaying = false;
+    onPlaybackPaused();
+  });
+}
+
+function nativePositionNow(): number {
+  if (!nativePlaying) return nativePosition;
+  const p = nativePosition + (Date.now() - nativePositionAt) / 1000;
+  return nativeDuration > 0 ? Math.min(p, nativeDuration) : p;
+}
+
+/** Download the next song in the queue while this one plays. */
+function prefetchNext(): void {
+  if (activeEngine !== "native" || !hasNext()) return;
+  const next = trackRegistry.get(currentQueue[currentQueueIndex + 1]);
+  if (next) void nativeAudio.prefetch(toNativeTrack(next)).catch(() => undefined);
+}
+
 // --- Shared state -------------------------------------------------------------
 
 function getRawPosition(): number {
+  if (activeEngine === "native") return nativePositionNow();
   if (activeEngine === "youtube") return yt?.getCurrentTime?.() || 0;
   return audio.currentTime || 0;
 }
@@ -164,6 +221,7 @@ export function getPosition(): number {
 }
 
 export function getDuration(): number {
+  if (activeEngine === "native") return nativeDuration;
   if (activeEngine === "youtube") return yt?.getDuration?.() || 0;
   return Number.isFinite(audio.duration) ? audio.duration : 0;
 }
@@ -188,6 +246,7 @@ function onPlaybackEnded(): void {
 
 export function isTrackPlaying(id: string): boolean {
   if (currentTrackId !== id) return false;
+  if (activeEngine === "native") return nativePlaying;
   if (activeEngine === "youtube") {
     return yt?.getPlayerState?.() === window.YT?.PlayerState?.PLAYING;
   }
@@ -247,6 +306,12 @@ export async function playPrevious(): Promise<void> {
 // --- Public controls ----------------------------------------------------------
 
 function stopActiveEngine(): void {
+  if (activeEngine === "native") {
+    nativePlaying = false;
+    void nativeAudio.stop().catch(() => undefined);
+  }
+  nativePosition = 0;
+  nativeDuration = 0;
   audio.pause();
   clearInterval(progressTimer);
   finishSeekMute();
@@ -270,6 +335,24 @@ export async function playTrack(id: string): Promise<void> {
   if (previousId) bus.emit("playstate", false);
   bus.emit("trackchange", item);
   emitProgressReset();
+
+  if (hasNativeAudio) {
+    // Claim the engine first: ExoPlayer's "playing" event can arrive before
+    // play() resolves.
+    setEngine("native");
+    bus.emit("loading", true);
+    try {
+      const { cancelled } = await nativeAudio.play(toNativeTrack(item));
+      if (cancelled || currentTrackId !== id) return;
+      bus.emit("loading", false);
+      prefetchNext();
+      return;
+    } catch (err) {
+      if (currentTrackId !== id) return;
+      bus.emit("loading", false);
+      console.warn("Native playback failed, falling back:", err);
+    }
+  }
 
   let youtubeId: string | null = null;
   if (getYoutubeApiKey()) {
@@ -309,7 +392,9 @@ function setEngine(engine: Engine): void {
 }
 
 export function togglePlayback(): void {
-  if (activeEngine === "youtube" && yt) {
+  if (activeEngine === "native") {
+    void (nativePlaying ? nativeAudio.pause() : nativeAudio.resume()).catch(() => undefined);
+  } else if (activeEngine === "youtube" && yt) {
     if (yt.getPlayerState() === window.YT.PlayerState.PLAYING) yt.pauseVideo();
     else yt.playVideo();
   } else if (audio.paused) {
@@ -331,7 +416,11 @@ export function seekTo(seconds: number): void {
   if (!currentTrackId) return;
   const duration = getDuration();
   const target = Math.max(0, duration > 0 ? Math.min(seconds, duration - 0.25) : seconds);
-  if (activeEngine === "youtube" && yt) {
+  if (activeEngine === "native") {
+    nativePosition = target;
+    nativePositionAt = Date.now();
+    void nativeAudio.seek({ position: target }).catch(() => undefined);
+  } else if (activeEngine === "youtube" && yt) {
     if (isPlaying()) startSeekMute();
     yt.seekTo(target, true);
   } else if (Number.isFinite(audio.duration)) {
@@ -366,6 +455,8 @@ export function getSnapshot(): {
 }
 
 export function initPlayer(): void {
+  initNativeEngine();
+
   // Play buttons are re-created on every render, so delegate from document.
   document.addEventListener("click", (e) => {
     const btn = (e.target as Element).closest<HTMLElement>(".play-overlay, .playlist-row-play");

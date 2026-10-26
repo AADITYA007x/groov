@@ -20,8 +20,10 @@ export const bus = createEmitter<{
   seeked: void;
   /** The current track's length became known (seconds). */
   durationchange: number;
-  /** Switched between the 30s preview and the YouTube player. */
+  /** Switched between the native player, YouTube player and 30s preview. */
   enginechange: Engine;
+  /** A song is being found/downloaded before it can start. */
+  loading: boolean;
   /** Playlists were created, edited or deleted. */
   playlistschange: void;
 }>();
