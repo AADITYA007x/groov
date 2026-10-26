@@ -10,6 +10,7 @@ import {
   seekTo,
   togglePlayback,
   getCurrentTrackId,
+  lastNativeError,
 } from "../player/player";
 import { openLyrics } from "../player/lyrics";
 import { bus } from "../state";
@@ -144,6 +145,7 @@ const ENGINE_LABELS = {
 function renderEngine(): void {
   const engine = getEngine();
   npLabel.textContent = currentItem ? `Now playing · ${ENGINE_LABELS[engine]}` : "Now playing";
+  npLabel.title = engine !== "native" && lastNativeError ? `Full song failed: ${lastNativeError}` : "";
   const yt = engine === "youtube";
   npVideoBtn.style.visibility = yt ? "visible" : "hidden";
   if (!yt && videoMode) setVideoMode(false);
@@ -184,6 +186,10 @@ export function initNowPlaying(): void {
   $("np-next").addEventListener("click", () => void playNext());
 
   $("player-open").addEventListener("click", open);
+  // Tap the label to see why a song fell back from the native full song.
+  npLabel.addEventListener("click", () => {
+    if (npLabel.title) alert(npLabel.title);
+  });
   $("np-close").addEventListener("click", () => close());
   npVideoBtn.addEventListener("click", () => setVideoMode(!videoMode));
   $("np-lyrics").addEventListener("click", () => openLyrics());

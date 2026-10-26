@@ -162,6 +162,8 @@ let nativePlaying = false;
 let nativePosition = 0;
 let nativePositionAt = 0;
 let nativeDuration = 0;
+/** Why the last full-song attempt failed (shown in Settings, for debugging). */
+export let lastNativeError: string | null = null;
 
 function initNativeEngine(): void {
   if (!hasNativeAudio) return;
@@ -351,6 +353,7 @@ export async function playTrack(id: string): Promise<void> {
       if (currentTrackId !== id) return;
       bus.emit("loading", false);
       console.warn("Native playback failed, falling back:", err);
+      lastNativeError = (err as Error)?.message || String(err);
     }
   }
 
