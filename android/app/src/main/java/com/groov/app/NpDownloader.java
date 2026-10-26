@@ -11,7 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.zip.GZIPInputStream;
-import javax.annotation.Nonnull;
+import androidx.annotation.NonNull;
 import org.schabi.newpipe.extractor.downloader.Downloader;
 import org.schabi.newpipe.extractor.downloader.Request;
 import org.schabi.newpipe.extractor.downloader.Response;
@@ -33,7 +33,7 @@ final class NpDownloader extends Downloader {
     private NpDownloader() {}
 
     @Override
-    public Response execute(@Nonnull Request request) throws IOException, ReCaptchaException {
+    public Response execute(@NonNull Request request) throws IOException, ReCaptchaException {
         HttpURLConnection conn = (HttpURLConnection) new URL(request.url()).openConnection();
         try {
             conn.setConnectTimeout(15_000);
