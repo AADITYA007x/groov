@@ -41,6 +41,15 @@ android {
             }
         }
     }
+    compileOptions {
+        // NewPipeExtractor uses newer Java APIs than Android 7 has
+        coreLibraryDesugaringEnabled true
+    }
+    packaging {
+        resources {
+            excludes += ['META-INF/DEPENDENCIES', 'META-INF/LICENSE*', 'META-INF/NOTICE*', 'META-INF/*.kotlin_module']
+        }
+    }
     buildTypes {
         release {
             signingConfig hasReleaseSigning ? signingConfigs.release : signingConfigs.debug
@@ -63,6 +72,11 @@ dependencies {
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     // MediaSessionCompat + MediaStyle notification for background playback
     implementation "androidx.media:media:1.7.0"
+    // Native full-length playback (phase 3)
+    implementation "androidx.media3:media3-exoplayer:1.5.1"
+    // Same commit NewPipe ships; bump it when YouTube changes break playback
+    implementation "com.github.TeamNewPipe:NewPipeExtractor:e8f89145a830b4d6cae32412007f24ea8b36c73a"
+    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs_nio:2.1.5"
     implementation project(':capacitor-android')
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"

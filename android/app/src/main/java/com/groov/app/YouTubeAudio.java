@@ -1,0 +1,267 @@
+package com.groov.app;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.util.Log;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import org.schabi.newpipe.extractor.InfoItem;
+import org.schabi.newpipe.extractor.MediaFormat;
+import org.schabi.newpipe.extractor.NewPipe;
+import org.schabi.newpipe.extractor.ServiceList;
+import org.schabi.newpipe.extractor.StreamingService;
+import org.schabi.newpipe.extractor.linkhandler.SearchQueryHandler;
+import org.schabi.newpipe.extractor.localization.ContentCountry;
+import org.schabi.newpipe.extractor.localization.Localization;
+import org.schabi.newpipe.extractor.search.SearchInfo;
+import org.schabi.newpipe.extractor.services.youtube.ItagItem;
+import org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper;
+import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeSearchQueryHandlerFactory;
+import org.schabi.newpipe.extractor.stream.AudioStream;
+import org.schabi.newpipe.extractor.stream.AudioTrackType;
+import org.schabi.newpipe.extractor.stream.DeliveryMethod;
+import org.schabi.newpipe.extractor.stream.StreamInfo;
+import org.schabi.newpipe.extractor.stream.StreamInfoItem;
+
+/**
+ * Finds a song on YouTube Music and downloads its audio, the way NewPipe does.
+ *
+ * No API key, no quota. Songs are cached as files (LRU, ~800 MB), so replays
+ * are instant and work offline. All methods block: call off the main thread.
+ */
+final class YouTubeAudio {
+
+    private static final String TAG = "GroovYouTube";
+    private static final long CACHE_LIMIT_BYTES = 800L * 1024 * 1024;
+    private static final int CHUNK_BYTES = 2 * 1024 * 1024;
+    /** YouTube's own player sends this POST body for media requests. */
+    private static final byte[] POST_BODY = new byte[] { 0x78, 0 };
+
+    private static boolean initialized;
+
+    private final File cacheDir;
+    private final SharedPreferences ids;
+    private final ConcurrentHashMap<String, Object> locks = new ConcurrentHashMap<>();
+
+    YouTubeAudio(Context context) {
+        synchronized (YouTubeAudio.class) {
+            if (!initialized) {
+                NewPipe.init(NpDownloader.get(), new Localization("en", "IN"), new ContentCountry("IN"));
+                initialized = true;
+            }
+        }
+        cacheDir = new File(context.getFilesDir(), "audio");
+        //noinspection ResultOfMethodCallIgnored
+        cacheDir.mkdirs();
+        ids = context.getSharedPreferences("groov_youtube_ids", Context.MODE_PRIVATE);
+    }
+
+    static final class Track {
+        final String key; // the app's track id, e.g. "song-1440818839"
+        final String title;
+        final String artist;
+        final long durationMs; // 0 = unknown
+
+        Track(String key, String title, String artist, long durationMs) {
+            this.key = key;
+            this.title = title;
+            this.artist = artist;
+            this.durationMs = durationMs;
+        }
+    }
+
+    /** Returns a playable local file for the track, downloading it if needed. */
+    File fetch(Track track) throws Exception {
+        String videoId = resolveVideoId(track);
+        Object lock = locks.computeIfAbsent(videoId, k -> new Object());
+        synchronized (lock) {
+            File cached = findCached(videoId);
+            if (cached != null) {
+                //noinspection ResultOfMethodCallIgnored
+                cached.setLastModified(System.currentTimeMillis());
+                return cached;
+            }
+            File file = download(videoId);
+            trimCache(file);
+            return file;
+        }
+    }
+
+    boolean isCached(Track track) {
+        String videoId = ids.getString(track.key, null);
+        return videoId != null && findCached(videoId) != null;
+    }
+
+    // --- Search ------------------------------------------------------------------
+
+    private String resolveVideoId(Track track) throws Exception {
+        String known = ids.getString(track.key, null);
+        if (known != null) return known;
+
+        StreamingService yt = ServiceList.YouTube;
+        String query = (track.title + " " + track.artist).trim();
+        SearchQueryHandler q = yt
+            .getSearchQHFactory()
+            .fromQuery(query, Collections.singletonList(YoutubeSearchQueryHandlerFactory.MUSIC_SONGS), "");
+        List<StreamInfoItem> songs = new ArrayList<>();
+        for (InfoItem item : SearchInfo.getInfo(yt, q).getRelatedItems()) {
+            if (item instanceof StreamInfoItem) songs.add((StreamInfoItem) item);
+        }
+        if (songs.isEmpty()) throw new IOException("No YouTube Music match for " + query);
+
+        // Prefer the first of the top results whose length matches the
+        // catalog's (within 10s); that skips live versions, remixes, etc.
+        StreamInfoItem pick = songs.get(0);
+        if (track.durationMs > 0) {
+            long target = track.durationMs / 1000;
+            for (int i = 0; i < Math.min(5, songs.size()); i++) {
+                long d = songs.get(i).getDuration();
+                if (d > 0 && Math.abs(d - target) <= 10) {
+                    pick = songs.get(i);
+                    break;
+                }
+            }
+        }
+
+        String videoId = yt.getStreamLHFactory().getId(pick.getUrl());
+        ids.edit().putString(track.key, videoId).apply();
+        return videoId;
+    }
+
+    // --- Download ------------------------------------------------------------------
+
+    private AudioStream bestAudio(String videoId) throws Exception {
+        StreamInfo info = StreamInfo.getInfo(ServiceList.YouTube, "https://www.youtube.com/watch?v=" + videoId);
+        AudioStream best = null;
+        int bestScore = Integer.MIN_VALUE;
+        for (AudioStream s : info.getAudioStreams()) {
+            if (!s.isUrl() || s.getDeliveryMethod() != DeliveryMethod.PROGRESSIVE_HTTP) continue;
+            AudioTrackType type = s.getAudioTrackType();
+            if (type != null && type != AudioTrackType.ORIGINAL) continue; // skip dubbed tracks
+            int bitrate = s.getAverageBitrate() > 0 ? s.getAverageBitrate() : s.getBitrate();
+            // Opus is better per bit; AAC (m4a) as a close second.
+            int score = bitrate + (s.getFormat() == MediaFormat.WEBMA_OPUS ? 16_000 : 0);
+            if (score > bestScore) {
+                bestScore = score;
+                best = s;
+            }
+        }
+        if (best == null) throw new IOException("No downloadable audio stream for " + videoId);
+        return best;
+    }
+
+    private File download(String videoId) throws Exception {
+        AudioStream stream = bestAudio(videoId);
+        String ext = stream.getFormat() != null ? stream.getFormat().getSuffix() : "m4a";
+        File part = new File(cacheDir, videoId + "." + ext + ".part");
+        File done = new File(cacheDir, videoId + "." + ext);
+
+        ItagItem itag = stream.getItagItem();
+        long total = itag != null ? itag.getContentLength() : -1;
+        String url = stream.getContent();
+
+        try (OutputStream out = new FileOutputStream(part)) {
+            long pos = 0;
+            int requestNumber = 0;
+            while (total <= 0 || pos < total) {
+                long end = pos + CHUNK_BYTES - 1;
+                if (total > 0) end = Math.min(end, total - 1);
+                long wanted = end - pos + 1;
+                long got = fetchRange(url, pos, end, requestNumber++, out);
+                pos += got;
+                if (got == 0 || got < wanted) break; // short read: end of file
+            }
+            if (pos == 0) throw new IOException("Empty audio for " + videoId);
+        } catch (Exception e) {
+            //noinspection ResultOfMethodCallIgnored
+            part.delete();
+            throw e;
+        }
+        if (!part.renameTo(done)) throw new IOException("Could not save " + done);
+        return done;
+    }
+
+    /** One ranged request, written to out. Returns bytes read. */
+    private long fetchRange(String url, long start, long end, int rn, OutputStream out) throws IOException {
+        String requestUrl = url + "&range=" + start + "-" + end + "&rn=" + rn;
+        HttpURLConnection conn = (HttpURLConnection) new URL(requestUrl).openConnection();
+        try {
+            conn.setConnectTimeout(15_000);
+            conn.setReadTimeout(20_000);
+            conn.setRequestMethod("POST");
+            conn.setDoOutput(true);
+            conn.setFixedLengthStreamingMode(POST_BODY.length);
+            if (YoutubeParsingHelper.isWebStreamingUrl(requestUrl)) {
+                conn.setRequestProperty("Origin", "https://www.youtube.com");
+                conn.setRequestProperty("Referer", "https://www.youtube.com/");
+            }
+            conn.setRequestProperty(
+                "User-Agent",
+                YoutubeParsingHelper.isVisionOsStreamingUrl(requestUrl)
+                    ? YoutubeParsingHelper.getVisionOsUserAgent(null)
+                    : NpDownloader.USER_AGENT
+            );
+            conn.setRequestProperty("Accept-Encoding", "identity");
+            try (OutputStream body = conn.getOutputStream()) {
+                body.write(POST_BODY);
+            }
+
+            int code = conn.getResponseCode();
+            if (code == 416) return 0; // asked past the end
+            if (code >= 400) throw new IOException("YouTube media request failed: HTTP " + code);
+
+            long read = 0;
+            byte[] buf = new byte[64 * 1024];
+            try (InputStream in = conn.getInputStream()) {
+                int n;
+                while ((n = in.read(buf)) != -1) {
+                    out.write(buf, 0, n);
+                    read += n;
+                }
+            }
+            return read;
+        } finally {
+            conn.disconnect();
+        }
+    }
+
+    // --- Cache ---------------------------------------------------------------------
+
+    private File findCached(String videoId) {
+        for (String ext : new String[] { "webm", "m4a" }) {
+            File f = new File(cacheDir, videoId + "." + ext);
+            if (f.isFile() && f.length() > 0) return f;
+        }
+        return null;
+    }
+
+    private void trimCache(File keep) {
+        File[] files = cacheDir.listFiles((dir, name) -> !name.endsWith(".part"));
+        if (files == null) return;
+        long total = 0;
+        for (File f : files) total += f.length();
+        if (total <= CACHE_LIMIT_BYTES) return;
+        Arrays.sort(files, (a, b) -> Long.compare(a.lastModified(), b.lastModified()));
+        for (File f : files) {
+            if (total <= CACHE_LIMIT_BYTES) break;
+            if (f.equals(keep)) continue;
+            total -= f.length();
+            if (!f.delete()) Log.w(TAG, "Could not delete " + f);
+        }
+    }
+
+    static String describe(Throwable e) {
+        String msg = e.getMessage();
+        return e.getClass().getSimpleName() + (msg != null ? ": " + msg : "");
+    }
+}
