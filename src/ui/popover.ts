@@ -3,10 +3,12 @@ import { addTrackToPlaylist, createPlaylist, getPlaylists, removeTrackFromPlayli
 import { queueFromElement, playTrack } from "../player/player";
 import { trackRegistry } from "../state";
 import { $, escapeHtml } from "../utils";
+import { pushStep, removeStep } from "./back";
 
 const popover = $("add-to-playlist-popover");
 
 function close(): void {
+  removeStep("popover");
   popover.style.display = "none";
   popover.innerHTML = "";
 }
@@ -36,6 +38,7 @@ export function openAddToPlaylist(trackId: string, anchorEl: HTMLElement): void 
 
   const rect = anchorEl.getBoundingClientRect();
   popover.style.display = "block";
+  pushStep("popover", close);
   const width = popover.offsetWidth || 220;
   popover.style.top = `${Math.min(rect.bottom + 6, window.innerHeight - 200)}px`;
   popover.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - width - 16))}px`;

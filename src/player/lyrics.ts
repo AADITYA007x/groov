@@ -5,6 +5,7 @@ import { bus, trackRegistry } from "../state";
 import type { Item, Lyrics } from "../types";
 import { $, escapeHtml } from "../utils";
 import { getCurrentTrackId } from "./player";
+import { pushStep, removeStep } from "../ui/back";
 
 const toggleBtn = $("lyrics-toggle-btn");
 const overlay = $("lyrics-overlay");
@@ -50,10 +51,12 @@ export function openLyrics(): void {
   const item = id ? trackRegistry.get(id) : undefined;
   if (!item) return;
   overlay.style.display = "flex";
+  pushStep("lyrics", close);
   void load(item);
 }
 
 function close(): void {
+  removeStep("lyrics");
   overlay.style.display = "none";
 }
 

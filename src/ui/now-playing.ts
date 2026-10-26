@@ -22,6 +22,7 @@ import { $, cssEscape, formatTime } from "../utils";
 import { updateBackgroundArt } from "./layout";
 import { openAddToPlaylist } from "./popover";
 import { createSeekBar, type SeekBar } from "./seekbar";
+import { pushStep, removeStep } from "./back";
 
 const bar = $("player-bar");
 const barArt = $<HTMLImageElement>("player-art");
@@ -164,17 +165,17 @@ function open(): void {
   if (!currentItem || isOpen()) return;
   np.style.display = "flex";
   document.body.classList.add("np-open");
-  history.pushState({ nowPlaying: true }, "");
+  pushStep("now-playing", close);
   requestAnimationFrame(() => np.classList.add("visible"));
 }
 
-function close(fromHistory = false): void {
+function close(): void {
+  removeStep("now-playing");
   if (!isOpen()) return;
   void setVideoMode(false);
   np.classList.remove("visible");
   document.body.classList.remove("np-open");
   np.style.display = "none";
-  if (!fromHistory && history.state?.nowPlaying) history.back();
 }
 
 // --- Init ---------------------------------------------------------------------------
@@ -206,7 +207,6 @@ export function initNowPlaying(): void {
     if (id) openAddToPlaylist(id, e.currentTarget as HTMLElement);
   });
 
-  window.addEventListener("popstate", () => close(true));
   window.addEventListener("resize", placeVideo);
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && isOpen()) close();

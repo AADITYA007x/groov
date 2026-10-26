@@ -2,6 +2,7 @@ import "./style.css";
 import { initLyrics } from "./player/lyrics";
 import { initMediaControls } from "./player/media-controls";
 import { initPlayer } from "./player/player";
+import { initBack } from "./ui/back";
 import { initLayout } from "./ui/layout";
 import { initNowPlaying } from "./ui/now-playing";
 import { initPopover } from "./ui/popover";
@@ -12,6 +13,7 @@ import { initViews } from "./ui/views";
 
 // Order matters for the document-level click handlers: play buttons first,
 // then add-to-playlist, then the plain card click (see ui/popover.ts).
+initBack();
 initLayout();
 initTheme();
 initPlayer();

@@ -6,6 +6,7 @@ import { $ } from "../utils";
 import { playlistRowMarkup } from "./cards";
 import { renderHomeFeed } from "./home";
 import { closeSidebar } from "./layout";
+import { pushStep } from "./back";
 
 const searchInput = $<HTMLInputElement>("search-input");
 const recentView = $("recent-view");
@@ -20,11 +21,22 @@ const playlistEmptyEl = $("playlist-empty");
 
 /** "search" or a playlist id. */
 let currentView = "search";
+let viewStepCount = 0;
+
+/** Back from here returns to the view we're leaving. */
+function recordViewChange(): void {
+  const previous = currentView;
+  pushStep(`view-${++viewStepCount}`, () =>
+    previous === "search" ? navigateToSearch(false) : navigateToPlaylist(previous, false),
+  );
+}
 
 export type SearchSubview = "recent" | "results" | "loading";
 
 export function showView(view: SearchSubview): void {
   if (currentView !== "search") {
+    // Typing a search while a playlist is open: back returns to the playlist.
+    recordViewChange();
     currentView = "search";
     navSearchBtn.classList.add("active");
     renderPlaylistNav();
@@ -70,7 +82,8 @@ function renderPlaylistView(id: string): void {
   playlistTrackListEl.innerHTML = playlist.tracks.map((item) => playlistRowMarkup(id, item)).join("");
 }
 
-export function navigateToPlaylist(id: string): void {
+export function navigateToPlaylist(id: string, record = true): void {
+  if (record && currentView !== id) recordViewChange();
   currentView = id;
   recentView.style.display = "none";
   resultsView.style.display = "none";
@@ -81,7 +94,8 @@ export function navigateToPlaylist(id: string): void {
   renderPlaylistView(id);
 }
 
-export function navigateToSearch(): void {
+export function navigateToSearch(record = true): void {
+  if (record && currentView !== "search") recordViewChange();
   currentView = "search";
   playlistViewEl.style.display = "none";
   navSearchBtn.classList.add("active");
@@ -112,7 +126,7 @@ export function initViews(): void {
     const name = getPlaylists()[currentView]?.name || "this playlist";
     if (!confirm(`Delete "${name}"? This can't be undone.`)) return;
     deletePlaylist(currentView);
-    navigateToSearch();
+    navigateToSearch(false);
   });
 
   bus.on("playlistschange", () => {

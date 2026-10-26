@@ -6,6 +6,7 @@ import type { Category, Item, SearchResult } from "../types";
 import { $, debounce, escapeHtml, storage } from "../utils";
 import { cardMarkup, topResultMarkup } from "./cards";
 import { showView } from "./views";
+import { hasStep, pushStep, removeStep } from "./back";
 
 const searchInput = $<HTMLInputElement>("search-input");
 const clearButton = $("clear-input");
@@ -47,7 +48,19 @@ function renderRecentChips(): void {
   }
 }
 
+/** Back from search results clears the search and returns home. */
+function recordSearchStep(): void {
+  if (hasStep("search")) return;
+  pushStep("search", () => {
+    searchInput.value = "";
+    clearButton.style.display = "none";
+    searchInput.blur();
+    showHome();
+  });
+}
+
 function showHome(): void {
+  removeStep("search");
   activeController?.abort();
   showView("recent");
   renderRecentChips();
@@ -132,6 +145,7 @@ async function runSearch(query: string): Promise<void> {
   activeController?.abort();
   const controller = new AbortController();
   activeController = controller;
+  recordSearchStep();
   showView("loading");
 
   let result: SearchResult;
