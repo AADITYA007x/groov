@@ -97,6 +97,11 @@ final class YouTubeAudio {
         }
     }
 
+    /** The YouTube video id this track was matched to, if known. */
+    String knownVideoId(String key) {
+        return ids.getString(key, null);
+    }
+
     boolean isCached(Track track) {
         String videoId = ids.getString(track.key, null);
         return videoId != null && findCached(videoId) != null;

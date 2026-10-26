@@ -11,7 +11,7 @@ interface NativeTrack {
 }
 
 interface NativeAudioPlugin {
-  play(track: NativeTrack): Promise<{ cancelled: boolean }>;
+  play(track: NativeTrack): Promise<{ cancelled: boolean; videoId?: string | null }>;
   prefetch(track: NativeTrack): Promise<void>;
   resume(): Promise<void>;
   pause(): Promise<void>;

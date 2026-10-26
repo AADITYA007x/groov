@@ -11,6 +11,9 @@ import {
   togglePlayback,
   getCurrentTrackId,
   lastNativeError,
+  canShowVideo,
+  startVideo,
+  stopVideo,
 } from "../player/player";
 import { openLyrics } from "../player/lyrics";
 import { bus } from "../state";
@@ -126,7 +129,12 @@ function placeVideo(): void {
   });
 }
 
-function setVideoMode(on: boolean): void {
+async function setVideoMode(on: boolean): Promise<void> {
+  if (on && !videoMode && getEngine() === "native") await startVideo();
+  if (!on && videoMode) {
+    videoMode = false; // first, so the engine switch below doesn't re-enter
+    stopVideo();
+  }
   videoMode = on && getEngine() === "youtube";
   ytHost.classList.toggle("as-video", videoMode);
   np.classList.toggle("video-mode", videoMode);
@@ -146,9 +154,8 @@ function renderEngine(): void {
   const engine = getEngine();
   npLabel.textContent = currentItem ? `Now playing · ${ENGINE_LABELS[engine]}` : "Now playing";
   npLabel.title = engine !== "native" && lastNativeError ? `Full song failed: ${lastNativeError}` : "";
-  const yt = engine === "youtube";
-  npVideoBtn.style.visibility = yt ? "visible" : "hidden";
-  if (!yt && videoMode) setVideoMode(false);
+  npVideoBtn.style.visibility = canShowVideo() ? "visible" : "hidden";
+  if (engine === "audio" && videoMode) void setVideoMode(false);
 }
 
 // --- Open / close (Android back button closes it too) -----------------------------
@@ -163,7 +170,7 @@ function open(): void {
 
 function close(fromHistory = false): void {
   if (!isOpen()) return;
-  setVideoMode(false);
+  void setVideoMode(false);
   np.classList.remove("visible");
   document.body.classList.remove("np-open");
   np.style.display = "none";
@@ -191,7 +198,7 @@ export function initNowPlaying(): void {
     if (npLabel.title) alert(npLabel.title);
   });
   $("np-close").addEventListener("click", () => close());
-  npVideoBtn.addEventListener("click", () => setVideoMode(!videoMode));
+  npVideoBtn.addEventListener("click", () => void setVideoMode(!videoMode));
   $("np-lyrics").addEventListener("click", () => openLyrics());
   $("np-add").addEventListener("click", (e) => {
     e.stopPropagation();
@@ -205,7 +212,17 @@ export function initNowPlaying(): void {
     if (e.key === "Escape" && isOpen()) close();
   });
 
-  bus.on("trackchange", renderTrack);
+  bus.on("trackchange", (item) => {
+    // A new song always starts as audio; hide the video of the old one.
+    if (videoMode) {
+      videoMode = false;
+      ytHost.classList.remove("as-video");
+      np.classList.remove("video-mode");
+      npVideoBtn.classList.remove("active");
+      ytHost.removeAttribute("style");
+    }
+    renderTrack(item);
+  });
   bus.on("playstate", (playing) => renderPlayState(playing));
   bus.on("progress", ({ currentTime, duration }) => renderProgress(currentTime, duration));
   bus.on("enginechange", renderEngine);

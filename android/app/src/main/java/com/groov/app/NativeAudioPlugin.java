@@ -163,6 +163,7 @@ public class NativeAudioPlugin extends Plugin {
                 player.play();
                 JSObject result = new JSObject();
                 result.put("cancelled", false);
+                result.put("videoId", youtube.knownVideoId(track.key)); // for "show video"
                 call.resolve(result);
             });
         });

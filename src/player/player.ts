@@ -162,6 +162,11 @@ let nativePlaying = false;
 let nativePosition = 0;
 let nativePositionAt = 0;
 let nativeDuration = 0;
+/** YouTube video the current native song came from (for "show video"). */
+let nativeVideoId: string | null = null;
+/** True while the video is shown in place of a native song. */
+let videoFromNative = false;
+
 /** Why the last full-song attempt failed (shown in Settings, for debugging). */
 export let lastNativeError: string | null = null;
 
@@ -308,6 +313,8 @@ export async function playPrevious(): Promise<void> {
 // --- Public controls ----------------------------------------------------------
 
 function stopActiveEngine(): void {
+  nativeVideoId = null;
+  videoFromNative = false;
   if (activeEngine === "native") {
     nativePlaying = false;
     void nativeAudio.stop().catch(() => undefined);
@@ -344,8 +351,9 @@ export async function playTrack(id: string): Promise<void> {
     setEngine("native");
     bus.emit("loading", true);
     try {
-      const { cancelled } = await nativeAudio.play(toNativeTrack(item));
+      const { cancelled, videoId } = await nativeAudio.play(toNativeTrack(item));
       if (cancelled || currentTrackId !== id) return;
+      nativeVideoId = videoId ?? null;
       bus.emit("loading", false);
       prefetchNext();
       return;
@@ -392,6 +400,48 @@ function emitProgressReset(): void {
 function setEngine(engine: Engine): void {
   activeEngine = engine;
   bus.emit("enginechange", engine);
+}
+
+// --- Video for native songs ---------------------------------------------------------
+// The native engine is audio only. "Show video" hands playback to the hidden
+// YouTube player at the same position; hiding it hands back.
+
+export function canShowVideo(): boolean {
+  return activeEngine === "youtube" || (activeEngine === "native" && Boolean(nativeVideoId));
+}
+
+export async function startVideo(): Promise<void> {
+  if (activeEngine !== "native" || !nativeVideoId || !currentTrackId) return;
+  const id = currentTrackId;
+  const position = getPosition();
+  const wasPlaying = nativePlaying;
+  const player = await getYoutubePlayer();
+  if (currentTrackId !== id || activeEngine !== "native") return;
+
+  // Switch engines before pausing, so the native "paused" event is ignored.
+  setEngine("youtube");
+  videoFromNative = true;
+  nativePlaying = false;
+  void nativeAudio.pause().catch(() => undefined);
+  player.loadVideoById(nativeVideoId, position);
+  if (!wasPlaying) setTimeout(() => player.pauseVideo(), 300);
+  startProgressPolling();
+}
+
+export function stopVideo(): void {
+  if (!videoFromNative || activeEngine !== "youtube" || !yt) return;
+  const position = yt.getCurrentTime() || 0;
+  const wasPlaying = yt.getPlayerState() === window.YT.PlayerState.PLAYING;
+  videoFromNative = false;
+  setEngine("native"); // before pausing, so YouTube's "paused" event is ignored
+  clearInterval(progressTimer);
+  finishSeekMute();
+  yt.pauseVideo();
+  nativePosition = position;
+  nativePositionAt = Date.now();
+  void nativeAudio.seek({ position }).catch(() => undefined);
+  if (wasPlaying) void nativeAudio.resume().catch(() => undefined);
+  else onPlaybackPaused();
 }
 
 export function togglePlayback(): void {
