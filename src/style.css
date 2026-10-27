@@ -3,6 +3,10 @@
    theme presets (see THEMES in script.js) — everything else is a neutral
    glass/translucency value shared by every theme. */
 :root {
+  /* Room for the phone's status bar (top) and gesture bar (bottom).
+     Capacitor sets --safe-area-inset-*; browsers use env(). */
+  --safe-top: max(var(--safe-area-inset-top, 0px), env(safe-area-inset-top, 0px));
+  --safe-bottom: max(var(--safe-area-inset-bottom, 0px), env(safe-area-inset-bottom, 0px));
   --bg: #15082e;
   --bg-elevated: rgba(255, 255, 255, 0.07);
   --bg-hover: rgba(255, 255, 255, 0.13);
@@ -89,7 +93,7 @@ body {
   backdrop-filter: blur(22px) saturate(1.3);
   -webkit-backdrop-filter: blur(22px) saturate(1.3);
   border-right: 1px solid var(--glass-border);
-  padding: 16px 12px;
+  padding: calc(16px + var(--safe-top)) 12px calc(16px + var(--safe-bottom));
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -270,7 +274,7 @@ body.has-player .app {
   margin: -10px -32px 32px;
   padding-left: 32px;
   padding-right: 32px;
-  padding-top: 14px;
+  padding-top: calc(14px + var(--safe-top));
   padding-bottom: 14px;
   background: var(--topbar-bg);
   backdrop-filter: blur(18px) saturate(1.4);
@@ -538,7 +542,7 @@ body.has-player .app {
   -webkit-backdrop-filter: blur(26px) saturate(1.5);
   border-top: 1px solid var(--glass-border);
   box-shadow: 0 -8px 30px rgba(10, 0, 30, 0.4);
-  padding: 10px 24px;
+  padding: 10px 24px calc(10px + var(--safe-bottom));
 }
 
 .player-track {
@@ -1141,7 +1145,7 @@ body.has-player .lyrics-toggle-btn {
   .player-bar {
     left: 10px;
     right: 10px;
-    bottom: 10px;
+    bottom: calc(10px + var(--safe-bottom));
     border-radius: 20px;
     padding: 10px 14px;
     gap: 14px;
@@ -1157,11 +1161,16 @@ body.has-player .lyrics-toggle-btn {
     padding: 16px 12px 80px;
   }
 
+  .app {
+    padding-top: 0;
+  }
+
   .topbar {
-    margin: -10px -12px 20px;
+    margin: 0 -12px 20px;
     padding-left: 12px;
     padding-right: 12px;
-    padding-top: 12px;
+    /* a little breathing room below the status bar */
+    padding-top: calc(14px + var(--safe-top));
     padding-bottom: 12px;
   }
 
@@ -1434,7 +1443,7 @@ body.np-open {
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: max(16px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+  padding: calc(12px + var(--safe-top)) 24px calc(20px + var(--safe-bottom));
   gap: 18px;
 }
 
@@ -1838,7 +1847,7 @@ body.np-open {
 .toast {
   position: fixed;
   left: 50%;
-  bottom: 130px;
+  bottom: calc(170px + var(--safe-bottom));
   z-index: 600;
   transform: translate(-50%, 20px);
   max-width: calc(100% - 32px);
@@ -1924,4 +1933,14 @@ body.np-open {
 .playlist-actions {
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+/* Playlist shuffle = the global shuffle setting, shown as a toggle */
+.shuffle-toggle {
+  opacity: 0.6;
+}
+
+.shuffle-toggle.active {
+  opacity: 1;
+  color: var(--accent-2-bright);
 }

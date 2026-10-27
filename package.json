@@ -1,6 +1,6 @@
 {
   "name": "groov",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "private": true,
   "description": "Groov: a private music player for Android and desktop, built on free music APIs.",
   "type": "module",

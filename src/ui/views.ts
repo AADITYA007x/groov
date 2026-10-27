@@ -4,6 +4,15 @@ import { deletePlaylist, getPlaylists, isOwner, removeTrackFromPlaylist, createP
 import { getAccount } from "../cloud/session";
 import { sharePlaylist } from "../cloud/sync";
 import { playPlaylist } from "../player/radio";
+import { isShuffleOn, toggleShuffle } from "../player/player";
+
+function renderShuffleToggle(): void {
+  const btn = $("shuffle-playlist-btn");
+  const on = isShuffleOn();
+  btn.classList.toggle("active", on);
+  btn.setAttribute("aria-pressed", String(on));
+  btn.textContent = on ? "🔀 Shuffle on" : "🔀 Shuffle";
+}
 import type { Playlist } from "../types";
 import { bus } from "../state";
 import { $ } from "../utils";
@@ -159,7 +168,13 @@ export function initViews(): void {
   });
 
   $("play-playlist-btn").addEventListener("click", () => void playPlaylist(currentView));
-  $("shuffle-playlist-btn").addEventListener("click", () => void playPlaylist(currentView, true));
+  // The same shuffle setting as in Now Playing, not a separate action.
+  $("shuffle-playlist-btn").addEventListener("click", () => {
+    toggleShuffle();
+    bus.emit("toast", isShuffleOn() ? "🔀 Shuffle on" : "Shuffle off");
+  });
+  bus.on("modechange", renderShuffleToggle);
+  renderShuffleToggle();
 
   shareBtn.addEventListener("click", async () => {
     const playlist = getPlaylists()[currentView];

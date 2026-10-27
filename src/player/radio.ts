@@ -9,7 +9,7 @@ import { getPlaylists } from "../library/playlists";
 import { bus, trackRegistry } from "../state";
 import type { Item } from "../types";
 import { hasNativeAudio, nativeAudio } from "./native-audio";
-import { appendToQueue, getCurrentTrackId, getQueueInfo, playTrack, setQueue } from "./player";
+import { appendToQueue, getCurrentTrackId, getQueueInfo, isShuffleOn, playTrack, setQueue } from "./player";
 
 interface RadioTrack {
   videoId: string;
@@ -195,17 +195,18 @@ export async function shuffleLibrary(): Promise<void> {
   bus.emit("toast", `🔀 Shuffling ${songs.length} songs from your playlists`);
 }
 
-/** Play a playlist from the top (shuffled if shuffle is on). */
-export async function playPlaylist(playlistId: string, shuffleIt = false): Promise<void> {
+/** Play a playlist: from the top, or from a random song if shuffle is on. */
+export async function playPlaylist(playlistId: string): Promise<void> {
   const playlist = getPlaylists()[playlistId];
   if (!playlist?.tracks.length) return;
-  const tracks = shuffleIt ? [...playlist.tracks].sort(() => Math.random() - 0.5) : playlist.tracks;
+  const tracks = playlist.tracks;
   tracks.forEach((t) => trackRegistry.set(t.id, t));
+  const start = isShuffleOn() ? tracks[Math.floor(Math.random() * tracks.length)] : tracks[0];
   setQueue(
     tracks.map((t) => t.id),
-    tracks[0].id,
+    start.id,
   );
-  await playTrack(tracks[0].id);
+  await playTrack(start.id);
 }
 
 export function initRadio(): void {
