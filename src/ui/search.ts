@@ -167,11 +167,33 @@ async function runSearch(query: string): Promise<void> {
   showView("results");
   renderTopResult(result.best);
   renderSections(result.matches, trimmed);
-  saveRecentSearch(trimmed);
+  shownQuery = trimmed;
+}
+
+/** The search whose results are on screen (saved once you use them). */
+let shownQuery: string | null = null;
+
+/**
+ * Save the search to "Recent searches" only once it's actually used: tapping
+ * a result, adding a song, "See all", or pressing Enter. Typing "demons"
+ * saves just "demons", not "de" and "demo" on the way.
+ */
+function commitSearch(): void {
+  if (!shownQuery) return;
+  saveRecentSearch(shownQuery);
   renderRecentChips();
 }
 
 export function initSearch(): void {
+  // Any tap on the results (play, add, open, See all) counts as using them.
+  $("results-view").addEventListener("click", commitSearch, true);
+  searchInput.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    searchInput.blur(); // hides the keyboard on phones
+    if (shownQuery && shownQuery === searchInput.value.trim()) commitSearch();
+    else void runSearch(searchInput.value).then(commitSearch);
+  });
   const debouncedSearch = debounce((q: string) => void runSearch(q), DEBOUNCE_MS);
 
   searchInput.addEventListener("input", () => {

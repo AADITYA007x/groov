@@ -10,6 +10,7 @@ export interface Item {
   externalUrl?: string | null;
   topSubtitle: string;
   artistId?: number;
+  collectionId?: number;
   genre?: string;
   /** Track length from the catalog; helps pick the right YouTube version. */
   durationMs?: number;

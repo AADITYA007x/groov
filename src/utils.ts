@@ -14,8 +14,12 @@ export function escapeHtml(s: string | null | undefined): string {
 
 /** Match quality of a result name against the query: exact > prefix > substring. */
 export function scoreMatch(name: string | null | undefined, query: string): number {
-  const n = (name || "").toLowerCase();
-  const q = query.toLowerCase();
+  // Ignore case, punctuation and accents: "Don't" ~ "dont", "Beyoncé" ~ "beyonce".
+  const clean = (s: string) =>
+    s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  const n = clean(name || "");
+  const q = clean(query);
+  if (!q) return 0;
   if (n === q) return 3;
   if (n.startsWith(q)) return 2;
   if (n.includes(q)) return 1;

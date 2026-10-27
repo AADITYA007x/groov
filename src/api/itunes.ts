@@ -46,6 +46,7 @@ export function normalizeResult(raw: ITunesRaw, category: Category): Item {
       externalUrl: raw.trackViewUrl ?? null,
       topSubtitle: `Song · ${raw.artistName ?? ""}`,
       artistId: raw.artistId,
+      collectionId: raw.collectionId,
       genre: raw.primaryGenreName,
       durationMs: raw.trackTimeMillis,
     };
@@ -59,6 +60,8 @@ export function normalizeResult(raw: ITunesRaw, category: Category): Item {
       artwork: raw.artworkUrl100 ?? null,
       externalUrl: raw.collectionViewUrl ?? null,
       topSubtitle: `Album · ${raw.artistName ?? ""}`,
+      artistId: raw.artistId,
+      collectionId: raw.collectionId,
     };
   }
   return {
@@ -68,6 +71,7 @@ export function normalizeResult(raw: ITunesRaw, category: Category): Item {
     artwork: null,
     externalUrl: raw.artistLinkUrl ?? null,
     topSubtitle: "Artist",
+    artistId: raw.artistId,
   };
 }
 
@@ -89,34 +93,75 @@ export async function fetchCategory(
   return data.results.map((r) => normalizeResult(r, category));
 }
 
+/** Songs fetched to judge popularity, even though fewer are shown. */
+const POPULARITY_SAMPLE = 15;
+
+/**
+ * Top result = good name match AND popular. iTunes lists songs roughly by
+ * popularity, so a song's rank is its popularity; an artist or album is as
+ * popular as the number of top songs that belong to it. So "demons" gives
+ * Imagine Dragons' hit, not an unknown artist literally named "Demons",
+ * while "imagine dragons" still gives the artist.
+ */
+export function pickTopResult(
+  query: string,
+  songs: Item[],
+  albums: Item[],
+  artists: Item[],
+): SearchResult["best"] {
+  const MATCH_POINTS = [0, 2, 4, 6]; // none, contains, prefix, exact
+  const sample = songs.slice(0, POPULARITY_SAMPLE);
+  const songsBy = (pred: (s: Item) => boolean) => sample.filter(pred).length;
+  const matchOf = (item: Item, withArtist: boolean) =>
+    Math.max(scoreMatch(item.name, query), withArtist ? scoreMatch(`${item.name} ${item.subtitle}`, query) : 0);
+
+  type Candidate = { item: Item; category: Category; score: number };
+  const candidates: Candidate[] = [
+    ...sample.slice(0, 10).map((item, i) => ({
+      item,
+      category: "tracks" as const,
+      score: MATCH_POINTS[matchOf(item, true)] + (10 - i),
+    })),
+    ...albums.slice(0, 3).map((item) => ({
+      item,
+      category: "albums" as const,
+      score: MATCH_POINTS[matchOf(item, false)] + 2 * songsBy((s) => s.collectionId === item.collectionId),
+    })),
+    ...artists.slice(0, 3).map((item, i) => ({
+      item,
+      category: "artists" as const,
+      score: MATCH_POINTS[matchOf(item, false)] + 2 * songsBy((s) => s.artistId === item.artistId) + (i === 0 ? 1 : 0),
+    })),
+  ];
+  // Nothing matching the words at all: still show the most popular song.
+  const best = candidates
+    .filter((c) => c.score > 0)
+    .sort((a, b) => b.score - a.score || (a.category === "tracks" ? -1 : 1))[0];
+  return best ? { item: best.item, category: best.category, score: best.score } : null;
+}
+
 export async function searchCatalog(
   query: string,
   limit: number,
   signal?: AbortSignal,
 ): Promise<SearchResult> {
-  const categories = Object.keys(ENTITY_BY_CATEGORY) as Category[];
-  const settled = await Promise.allSettled(
-    categories.map((category) => fetchCategory(query, category, limit, signal)),
-  );
-
-  const matches: SearchResult["matches"] = {};
-  let best: SearchResult["best"] = null;
-
-  settled.forEach((outcome, i) => {
-    const category = categories[i];
-    const items = outcome.status === "fulfilled" ? outcome.value : [];
-    matches[category] = items;
-    if (items.length) {
-      const score = scoreMatch(items[0].name, query);
-      if (!best || score > best.score) best = { item: items[0], score, category };
-    }
-  });
-
+  const [songs, albums, artists] = await Promise.allSettled([
+    fetchCategory(query, "tracks", Math.max(limit, POPULARITY_SAMPLE), signal),
+    fetchCategory(query, "albums", limit, signal),
+    fetchCategory(query, "artists", limit, signal),
+  ]);
   // Every category failing means the network is down, not "no results".
   if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-  if (settled.every((s) => s.status === "rejected")) throw new Error("Catalog unreachable");
+  if ([songs, albums, artists].every((s) => s.status === "rejected")) throw new Error("Catalog unreachable");
 
-  return { matches, best };
+  const value = (r: PromiseSettledResult<Item[]>) => (r.status === "fulfilled" ? r.value : []);
+  const allSongs = value(songs);
+  const matches: SearchResult["matches"] = {
+    tracks: allSongs.slice(0, limit),
+    albums: value(albums),
+    artists: value(artists),
+  };
+  return { matches, best: pickTopResult(query, allSongs, value(albums), value(artists)) };
 }
 
 export async function fetchArtistTracks(artistId: number, limit: number): Promise<Item[]> {
