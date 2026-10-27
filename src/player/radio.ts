@@ -87,7 +87,7 @@ async function catalogRadioAfter(seed: Item): Promise<Item[]> {
   return items.filter((i) => i.id !== seed.id && i.previewUrl).sort(() => Math.random() - 0.5);
 }
 
-async function radioAfter(seed: Item): Promise<Item[]> {
+export async function radioAfter(seed: Item): Promise<Item[]> {
   if (hasNativeAudio) {
     try {
       const items = await nativeRadioAfter(seed);
@@ -143,7 +143,7 @@ async function topUp(): Promise<void> {
 
 // --- Surprise me / Shuffle my library ------------------------------------------------
 
-function librarySongs(): Item[] {
+export function librarySongs(): Item[] {
   const seen = new Map<string, Item>();
   for (const p of Object.values(getPlaylists())) for (const t of p.tracks) seen.set(t.id, t);
   return [...seen.values()];

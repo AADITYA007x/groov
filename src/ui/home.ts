@@ -3,10 +3,11 @@
 // artists/genres already in your playlists).
 import { fetchArtistTracks, fetchCategory, fetchTrendingSongs } from "../api/itunes";
 import { OVERVIEW_LIMIT } from "../config";
-import { mainArtist, recentlyPlayed, topSongs, type SongStat } from "../library/history";
+import { recentlyPlayed } from "../library/history";
+import { cachedMixSongs, getMixes, loadMixSongs, warmMixes, type Mix } from "../library/mixes";
 import { getPlaylists } from "../library/playlists";
-import { playTrack, setQueue } from "../player/player";
-import { startRadio } from "../player/radio";
+import { isShuffleOn, playTrack, setQueue } from "../player/player";
+import { navigateTo } from "./views";
 import { bus, trackRegistry } from "../state";
 import type { Item } from "../types";
 import { $, escapeHtml } from "../utils";
@@ -14,82 +15,18 @@ import { cardMarkup, sectionMarkup } from "./cards";
 
 // --- Made for you -------------------------------------------------------------------
 
-const DAY = 86400000;
+const trendingSection = $("trending-section");
+const trendingGrid = $("trending-grid");
+const recommendationsSection = $("recommendations-section");
+const recommendationsContainer = $("recommendations-container");
 const madeSection = $("made-for-you-section");
 const madeRow = $("made-for-you");
 const recentSection = $("recently-played-section");
 const recentGrid = $("recently-played-grid");
 
-interface Mix {
-  title: string;
-  subtitle: string;
-  art: (string | null | undefined)[];
-  /** Play a fixed list, or start radio from a song. */
-  songs?: Item[];
-  radioFrom?: Item;
-}
-let mixes: Mix[] = [];
-
-/** Same picks all day, new ones tomorrow. */
-function dailyPick<T>(items: T[], salt: number): T | undefined {
-  if (!items.length) return undefined;
-  const day = Math.floor(Date.now() / DAY);
-  return items[(day * 7 + salt * 3) % items.length];
-}
-
-function buildMixes(): Mix[] {
-  const now = Date.now();
-  const out: Mix[] = [];
-  const month = topSongs(now - 28 * DAY, 40);
-
-  const onRepeat = month.filter((s) => s.plays >= 2).slice(0, 25);
-  if (onRepeat.length >= 3) {
-    out.push({
-      title: "On Repeat",
-      subtitle: "Songs you can't stop playing",
-      art: onRepeat.map((s) => s.item.artwork),
-      songs: onRepeat.map((s) => s.item),
-    });
-  }
-
-  // Daily mixes: radio from one of your top songs, each a different artist.
-  const seen = new Set<string>();
-  const seeds: SongStat[] = [];
-  for (const s of month.length >= 3 ? month : topSongs(0, 40)) {
-    const artist = mainArtist(s.item.subtitle).toLowerCase();
-    if (seen.has(artist)) continue;
-    seen.add(artist);
-    seeds.push(s);
-  }
-  const top = seeds.slice(0, 8);
-  const picks = [dailyPick(top.slice(0, 4), 1), dailyPick(top.slice(4), 2) ?? dailyPick(top.slice(1, 4), 5)];
-  picks.forEach((seed, i) => {
-    if (!seed || (i === 1 && seed === picks[0])) return;
-    out.push({
-      title: `Daily Mix ${i + 1}`,
-      subtitle: `${mainArtist(seed.item.subtitle)} and more`,
-      art: [seed.item.artwork],
-      radioFrom: seed.item,
-    });
-  });
-
-  // Rediscover: songs you played a lot, but not in the last 3 weeks.
-  const rediscover = topSongs(0, 300)
-    .filter((s) => s.lastPlayed < now - 21 * DAY && s.plays >= 2)
-    .slice(0, 25);
-  if (rediscover.length >= 3) {
-    out.push({
-      title: "Rediscover",
-      subtitle: "Old favourites you haven't played lately",
-      art: rediscover.map((s) => s.item.artwork),
-      songs: rediscover.map((s) => s.item),
-    });
-  }
-  return out;
-}
-
-function mixArt(art: Mix["art"]): string {
-  const imgs = art.filter(Boolean).slice(0, 4) as string[];
+export function mixArtMarkup(mix: Mix): string {
+  const songs = cachedMixSongs(mix) ?? (mix.seed ? [mix.seed] : []);
+  const imgs = [...new Set(songs.map((s) => s.artwork).filter(Boolean) as string[])].slice(0, 4);
   if (imgs.length >= 4) {
     return `<div class="mix-art grid">${imgs.map((src) => `<img src="${escapeHtml(src)}" alt="" loading="lazy" />`).join("")}</div>`;
   }
@@ -98,57 +35,71 @@ function mixArt(art: Mix["art"]): string {
     : `<div class="mix-art art-fallback">🎵</div>`;
 }
 
+let mixes: Mix[] = [];
+
 function renderMadeForYou(): void {
-  mixes = buildMixes();
+  mixes = getMixes();
   madeSection.style.display = mixes.length ? "block" : "none";
   madeRow.innerHTML = mixes
-    .map(
-      (m, i) => `
-      <button class="mix-card" data-mix="${i}">
-        ${mixArt(m.art)}
-        <span class="mix-play">▶</span>
-        <span class="mix-title">${m.radioFrom ? "📻 " : ""}${escapeHtml(m.title)}</span>
-        <span class="mix-sub">${escapeHtml(m.subtitle)}</span>
-      </button>`,
-    )
+    .map((m) => {
+      const songs = cachedMixSongs(m);
+      const count = songs ? ` · ${songs.length} songs` : "";
+      return `
+      <div class="mix-card" data-mix="${m.id}" role="button" tabindex="0">
+        ${mixArtMarkup(m)}
+        <button class="mix-play" data-mix-play="${m.id}" aria-label="Play ${escapeHtml(m.title)}">▶</button>
+        <span class="mix-title">${escapeHtml(m.title)}</span>
+        <span class="mix-sub">${escapeHtml(m.subtitle)}${count}</span>
+      </div>`;
+    })
     .join("");
 
   const recent = recentlyPlayed(6);
   recentSection.style.display = recent.length >= 2 ? "block" : "none";
   recentGrid.innerHTML = recent.map((item) => cardMarkup(item, "tracks")).join("");
+  void warmMixes();
 }
 
-function playMix(mix: Mix): void {
-  if (mix.radioFrom) {
-    trackRegistry.set(mix.radioFrom.id, mix.radioFrom);
-    void startRadio(mix.radioFrom);
+/** Play a mix from the top (or a random song when shuffle is on). */
+export async function playMix(mix: Mix): Promise<void> {
+  let songs: Item[];
+  try {
+    if (!cachedMixSongs(mix)) bus.emit("toast", `Getting ${mix.title} ready…`);
+    songs = await loadMixSongs(mix);
+  } catch {
+    bus.emit("toast", "Can't load this mix right now");
     return;
   }
-  const songs = mix.songs ?? [];
   if (!songs.length) return;
   songs.forEach((s) => trackRegistry.set(s.id, s));
+  const start = isShuffleOn() ? songs[Math.floor(Math.random() * songs.length)] : songs[0];
   setQueue(
     songs.map((s) => s.id),
-    songs[0].id,
+    start.id,
   );
-  void playTrack(songs[0].id);
+  await playTrack(start.id);
   bus.emit("toast", `▶ ${mix.title}`);
 }
 
 export function initHome(): void {
   madeRow.addEventListener("click", (e) => {
-    const card = (e.target as Element).closest<HTMLElement>("[data-mix]");
-    if (card) playMix(mixes[Number(card.dataset.mix)]);
+    const target = e.target as Element;
+    const play = target.closest<HTMLElement>("[data-mix-play]");
+    if (play) {
+      const mix = mixes.find((m) => m.id === play.dataset.mixPlay);
+      if (mix) void playMix(mix);
+      return;
+    }
+    const card = target.closest<HTMLElement>("[data-mix]");
+    if (card) navigateTo(`mix:${card.dataset.mix}`);
   });
-  bus.on("historychange", () => {
+  const refresh = () => {
     if ($("recent-view").style.display !== "none") renderMadeForYou();
-  });
+  };
+  bus.on("historychange", refresh);
+  bus.on("mixchange", refresh);
+  bus.on("playlistschange", refresh);
 }
-
-const trendingSection = $("trending-section");
-const trendingGrid = $("trending-grid");
-const recommendationsSection = $("recommendations-section");
-const recommendationsContainer = $("recommendations-container");
 
 async function renderTrending(): Promise<void> {
   try {

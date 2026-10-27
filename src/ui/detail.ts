@@ -1,11 +1,13 @@
-// Artist and album pages, inside the app.
+// Artist, album and Made for you mix pages, inside the app.
 //   Artist: popular songs (by popularity), albums (newest first), Play, Radio.
 //   Album: songs in track order, Play, Radio, tap the artist to open them.
 import { fetchAlbumPage, fetchArtistPage } from "../api/itunes";
 import { hiResArtwork } from "../player/media-controls";
 import { isShuffleOn, playTrack, setQueue } from "../player/player";
 import { startRadio } from "../player/radio";
-import { trackRegistry } from "../state";
+import { bus, trackRegistry } from "../state";
+import { cachedMixSongs, getMix, loadMixSongs } from "../library/mixes";
+import { addTrackToPlaylist, createPlaylist, getPlaylists } from "../library/playlists";
 import type { Item } from "../types";
 import { $, escapeHtml } from "../utils";
 import { cardMarkup, trackRowMarkup } from "./cards";
@@ -17,11 +19,15 @@ const subEl = $("detail-sub");
 const body = $("detail-body");
 const playBtn = $<HTMLButtonElement>("detail-play");
 const radioBtn = $<HTMLButtonElement>("detail-radio");
+const saveBtn = $<HTMLButtonElement>("detail-save");
+let currentMixTitle = "";
 
 let token = 0;
 let tracks: Item[] = [];
 
-function setHeader(kind: "Artist" | "Album", title: string, subHtml: string, artwork: string | null): void {
+type Kind = "Artist" | "Album" | "Made for you";
+
+function setHeader(kind: Kind, title: string, subHtml: string, artwork: string | null): void {
   kindEl.textContent = kind;
   titleEl.textContent = title;
   subEl.innerHTML = subHtml;
@@ -31,7 +37,7 @@ function setHeader(kind: "Artist" | "Album", title: string, subHtml: string, art
   art.style.visibility = src ? "visible" : "hidden";
 }
 
-function setLoading(kind: "Artist" | "Album", hintName: string): void {
+function setLoading(kind: Kind, hintName: string): void {
   setHeader(kind, hintName || "Loading…", "", null);
   playBtn.disabled = true;
   radioBtn.disabled = true;
@@ -84,12 +90,40 @@ async function renderAlbum(collectionId: number, t: number): Promise<void> {
   radioBtn.disabled = !tracks.length;
 }
 
-/** view is "artist:<id>[:name]" or "album:<id>". */
+async function renderMix(id: string, t: number): Promise<void> {
+  const mix = getMix(id);
+  if (!mix) {
+    body.innerHTML = `<p class="muted">This mix isn't available any more — Made for you changes every day.</p>`;
+    return;
+  }
+  currentMixTitle = mix.title;
+  const cached = cachedMixSongs(mix);
+  if (!cached) setLoading("Made for you", mix.title);
+  const songs = cached ?? (await loadMixSongs(mix));
+  if (t !== token) return;
+  const art = songs.find((s) => s.artwork)?.artwork ?? null;
+  const daily = mix.seed ? " · new every day" : "";
+  setHeader("Made for you", mix.title, `${escapeHtml(mix.subtitle)} · ${songs.length} songs${daily}`, art);
+  tracks = songs;
+  body.innerHTML = songs.length
+    ? `<div class="playlist-track-list">${songs.map((s, i) => trackRowMarkup(s, i)).join("")}</div>`
+    : `<p class="muted">Couldn't find songs for this mix. Check your internet and try again.</p>`;
+  playBtn.disabled = !songs.length;
+  radioBtn.disabled = !songs.length;
+  saveBtn.style.display = songs.length ? "inline-flex" : "none";
+}
+
+/** view is "artist:<id>[:name]", "album:<id>" or "mix:<id>". */
 export function renderDetail(view: string): void {
   const t = ++token;
   const [kind, id, ...rest] = view.split(":");
+  saveBtn.style.display = "none";
   const job =
-    kind === "artist" ? renderArtist(Number(id), decodeURIComponent(rest.join(":")), t) : renderAlbum(Number(id), t);
+    kind === "artist"
+      ? renderArtist(Number(id), decodeURIComponent(rest.join(":")), t)
+      : kind === "mix"
+        ? renderMix(id, t)
+        : renderAlbum(Number(id), t);
   job.catch(() => t === token && showError());
 }
 
@@ -106,5 +140,15 @@ export function initDetail(): void {
   });
   radioBtn.addEventListener("click", () => {
     if (tracks[0]) void startRadio(tracks[0]);
+  });
+  saveBtn.addEventListener("click", () => {
+    if (!tracks.length) return;
+    // "Daily Mix 1 · 27 Oct", so saving again tomorrow makes a new one.
+    const date = new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+    const name = `${currentMixTitle} · ${date}`;
+    const existing = Object.values(getPlaylists()).find((p) => p.name === name);
+    const id = existing?.id ?? createPlaylist(name);
+    tracks.forEach((s) => addTrackToPlaylist(id, s));
+    bus.emit("toast", `Saved ${tracks.length} songs to "${name}"`);
   });
 }

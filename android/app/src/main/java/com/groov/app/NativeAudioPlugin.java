@@ -360,14 +360,20 @@ public class NativeAudioPlugin extends Plugin {
     @PluginMethod
     public void prefetch(PluginCall call) {
         YouTubeAudio.Track track = trackFrom(call);
-        call.resolve();
-        if (track.key.isEmpty() || youtube.isCached(track)) return;
+        // wait: resolve once downloaded (for downloading songs one by one).
+        boolean wait = Boolean.TRUE.equals(call.getBoolean("wait", false));
+        if (!wait) call.resolve();
+        if (track.key.isEmpty() || youtube.isCached(track)) {
+            if (wait) call.resolve();
+            return;
+        }
         prefetcher.execute(() -> {
             try {
                 youtube.fetch(track);
             } catch (Exception e) {
                 Log.i(TAG, "Prefetch failed for " + track.title + ": " + YouTubeAudio.describe(e));
             }
+            if (wait) call.resolve();
         });
     }
 

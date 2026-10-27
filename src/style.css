@@ -2368,6 +2368,8 @@ body.np-open {
 }
 
 .mix-play {
+  border: none;
+  cursor: pointer;
   position: absolute;
   right: 16px;
   top: calc(150px - 54px);

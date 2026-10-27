@@ -46,7 +46,7 @@ const navStatsBtn = $("nav-stats");
 let currentView = "search";
 let viewStepCount = 0;
 
-const isDetail = (view: string) => view.startsWith("artist:") || view.startsWith("album:");
+const isDetail = (view: string) => /^(artist|album|mix):/.test(view);
 
 /** Back from here returns to the view we're leaving. */
 function recordViewChange(): void {

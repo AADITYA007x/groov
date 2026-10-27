@@ -55,4 +55,6 @@ export const bus = createEmitter<{
   historychange: void;
   /** The sleep timer was set, ticked or ended. */
   sleepchange: void;
+  /** Made for you mixes changed (new day, songs fetched). */
+  mixchange: void;
 }>();
