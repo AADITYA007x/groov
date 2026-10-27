@@ -12,6 +12,7 @@ import {
   getCurrentTrackId,
   lastNativeError,
   canShowVideo,
+  isVideoPending,
   startVideo,
   stopVideo,
 } from "../player/player";
@@ -136,7 +137,8 @@ async function setVideoMode(on: boolean): Promise<void> {
     videoMode = false; // first, so the engine switch below doesn't re-enter
     stopVideo();
   }
-  videoMode = on && getEngine() === "youtube";
+  // While the video loads, the song keeps playing as audio (isVideoPending).
+  videoMode = on && (getEngine() === "youtube" || isVideoPending());
   ytHost.classList.toggle("as-video", videoMode);
   np.classList.toggle("video-mode", videoMode);
   npVideoBtn.classList.toggle("active", videoMode);
@@ -226,6 +228,10 @@ export function initNowPlaying(): void {
   bus.on("playstate", (playing) => renderPlayState(playing));
   bus.on("progress", ({ currentTime, duration }) => renderProgress(currentTime, duration));
   bus.on("enginechange", renderEngine);
+  bus.on("videounavailable", () => {
+    if (videoMode) void setVideoMode(false);
+    npLabel.textContent = "Video unavailable · playing audio";
+  });
   bus.on("loading", (loading) => {
     for (const btn of [barToggle, npToggle]) btn.classList.toggle("is-loading", loading);
     if (loading) npLabel.textContent = "Finding the full song…";

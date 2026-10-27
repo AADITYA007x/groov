@@ -114,8 +114,12 @@ function hideCaptions(player: YT.Player): void {
 }
 
 function onYoutubeStateChange(e: YT.OnStateChangeEvent): void {
-  if (activeEngine !== "youtube") return;
   const S = window.YT.PlayerState;
+  if (videoHandover && e.data === S.PLAYING) {
+    continueHandover(e.target);
+    return;
+  }
+  if (activeEngine !== "youtube") return;
   if (e.data === S.PLAYING) {
     hideCaptions(e.target);
     finishSeekMute();
@@ -313,6 +317,7 @@ export async function playPrevious(): Promise<void> {
 // --- Public controls ----------------------------------------------------------
 
 function stopActiveEngine(): void {
+  cancelHandover();
   nativeVideoId = null;
   videoFromNative = false;
   if (activeEngine === "native") {
@@ -410,6 +415,47 @@ export function canShowVideo(): boolean {
   return activeEngine === "youtube" || (activeEngine === "native" && Boolean(nativeVideoId));
 }
 
+// Gapless: while playing, the song keeps going natively and the video loads
+// muted; once the video is really playing at the same spot, sound hands over.
+let videoHandover: { trackId: string; attempts: number; timer: ReturnType<typeof setTimeout> } | null = null;
+
+export function isVideoPending(): boolean {
+  return videoHandover !== null;
+}
+
+function cancelHandover(): void {
+  if (!videoHandover) return;
+  clearTimeout(videoHandover.timer);
+  videoHandover = null;
+  yt?.pauseVideo?.();
+  if (yt?.isMuted?.()) yt.unMute();
+}
+
+function continueHandover(player: YT.Player): void {
+  const h = videoHandover!;
+  if (currentTrackId !== h.trackId || activeEngine !== "native") {
+    cancelHandover();
+    return;
+  }
+  const target = nativePositionNow();
+  // Too far off (the video took a while to load): jump closer, stay muted, retry.
+  if (Math.abs(player.getCurrentTime() - target) > 0.35 && h.attempts < 2) {
+    h.attempts += 1;
+    player.seekTo(target + 0.15, true);
+    return;
+  }
+  clearTimeout(h.timer);
+  videoHandover = null;
+  setEngine("youtube"); // first, so the native "paused" event is ignored
+  videoFromNative = true;
+  nativePlaying = false;
+  player.unMute();
+  void nativeAudio.pause().catch(() => undefined);
+  hideCaptions(player);
+  startProgressPolling();
+  onPlaybackStarted();
+}
+
 export async function startVideo(): Promise<void> {
   if (activeEngine !== "native" || !nativeVideoId || !currentTrackId) return;
   const id = currentTrackId;
@@ -417,6 +463,22 @@ export async function startVideo(): Promise<void> {
   const wasPlaying = nativePlaying;
   const player = await getYoutubePlayer();
   if (currentTrackId !== id || activeEngine !== "native") return;
+
+  if (wasPlaying) {
+    cancelHandover();
+    player.mute();
+    videoHandover = {
+      trackId: id,
+      attempts: 0,
+      // Video never started (network, blocked video): stay on audio.
+      timer: setTimeout(() => {
+        cancelHandover();
+        bus.emit("videounavailable", undefined);
+      }, 12000),
+    };
+    player.loadVideoById(nativeVideoId, position + 0.5);
+    return;
+  }
 
   // Switch engines before pausing, so the native "paused" event is ignored.
   setEngine("youtube");
@@ -429,6 +491,10 @@ export async function startVideo(): Promise<void> {
 }
 
 export function stopVideo(): void {
+  if (videoHandover) {
+    cancelHandover();
+    return;
+  }
   if (!videoFromNative || activeEngine !== "youtube" || !yt) return;
   const position = yt.getCurrentTime() || 0;
   const wasPlaying = yt.getPlayerState() === window.YT.PlayerState.PLAYING;
@@ -436,12 +502,21 @@ export function stopVideo(): void {
   setEngine("native"); // before pausing, so YouTube's "paused" event is ignored
   clearInterval(progressTimer);
   finishSeekMute();
-  yt.pauseVideo();
   nativePosition = position;
   nativePositionAt = Date.now();
   void nativeAudio.seek({ position }).catch(() => undefined);
-  if (wasPlaying) void nativeAudio.resume().catch(() => undefined);
-  else onPlaybackPaused();
+  if (wasPlaying) {
+    // Start the saved audio first (it's instant), then stop the video, so
+    // there's no silent gap in between.
+    void nativeAudio.resume().catch(() => undefined);
+    const player = yt;
+    setTimeout(() => {
+      if (activeEngine === "native") player.pauseVideo();
+    }, 150);
+  } else {
+    yt.pauseVideo();
+    onPlaybackPaused();
+  }
 }
 
 export function togglePlayback(): void {

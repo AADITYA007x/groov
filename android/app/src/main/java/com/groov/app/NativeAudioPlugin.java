@@ -153,11 +153,28 @@ public class NativeAudioPlugin extends Plugin {
                 else resolveCancelled(call);
                 return;
             }
+            // Match YouTube's loudness normalization so it sounds the same as the video.
+            String videoId = youtube.knownVideoId(track.key);
+            float gain = videoId != null ? youtube.gainFor(videoId) : Float.NaN;
+            if (Float.isNaN(gain) && videoId != null) {
+                // Saved before gains were stored: look it up in the background.
+                prefetcher.execute(() -> {
+                    try {
+                        float g = youtube.ensureGain(videoId);
+                        main.post(() -> {
+                            if (token == playToken.get() && player != null) player.setVolume(g);
+                        });
+                    } catch (Exception e) {
+                        Log.i(TAG, "No loudness for " + videoId + ": " + YouTubeAudio.describe(e));
+                    }
+                });
+            }
             main.post(() -> {
                 if (token != playToken.get() || player == null) {
                     resolveCancelled(call);
                     return;
                 }
+                player.setVolume(Float.isNaN(gain) ? 1f : gain);
                 player.setMediaItem(MediaItem.fromUri(Uri.fromFile(file)));
                 player.prepare();
                 player.play();

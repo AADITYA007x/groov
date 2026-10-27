@@ -30,6 +30,7 @@ import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeSearchQu
 import org.schabi.newpipe.extractor.stream.AudioStream;
 import org.schabi.newpipe.extractor.stream.AudioTrackType;
 import org.schabi.newpipe.extractor.stream.DeliveryMethod;
+import org.schabi.newpipe.extractor.stream.StreamExtractor;
 import org.schabi.newpipe.extractor.stream.StreamInfo;
 import org.schabi.newpipe.extractor.stream.StreamInfoItem;
 
@@ -47,6 +48,7 @@ final class YouTubeAudio {
     /** YouTube's own player sends this POST body for media requests. */
     private static final byte[] POST_BODY = new byte[] { 0x78, 0 };
 
+    private static final String GAIN_PREFIX = "gain:";
     private static boolean initialized;
 
     private final File cacheDir;
@@ -145,8 +147,38 @@ final class YouTubeAudio {
 
     // --- Download ------------------------------------------------------------------
 
+    /** Fetches YouTube's info for a video; remembers its loudness while at it. */
+    private StreamInfo loadInfo(String videoId) throws Exception {
+        StreamExtractor extractor = ServiceList.YouTube.getStreamExtractor("https://www.youtube.com/watch?v=" + videoId);
+        StreamInfo info = StreamInfo.getInfo(extractor);
+        Float loudnessDb = Loudness.find(extractor, bestAudioOf(info, videoId).getItag());
+        float gain = Loudness.gainFor(loudnessDb);
+        ids.edit().putFloat(GAIN_PREFIX + videoId, gain).apply();
+        Log.i(TAG, "Loudness for " + videoId + ": " + loudnessDb + " dB -> volume " + gain);
+        return info;
+    }
+
+    /**
+     * Volume (0..1) that matches YouTube's own loudness normalization, so the
+     * song sounds the same here as in the video. NaN if not known yet.
+     */
+    float gainFor(String videoId) {
+        return ids.getFloat(GAIN_PREFIX + videoId, Float.NaN);
+    }
+
+    /** For songs cached before gains were stored: look it up now (network). */
+    float ensureGain(String videoId) throws Exception {
+        float known = gainFor(videoId);
+        if (!Float.isNaN(known)) return known;
+        loadInfo(videoId);
+        return gainFor(videoId);
+    }
+
     private AudioStream bestAudio(String videoId) throws Exception {
-        StreamInfo info = StreamInfo.getInfo(ServiceList.YouTube, "https://www.youtube.com/watch?v=" + videoId);
+        return bestAudioOf(loadInfo(videoId), videoId);
+    }
+
+    private static AudioStream bestAudioOf(StreamInfo info, String videoId) throws IOException {
         AudioStream best = null;
         int bestScore = Integer.MIN_VALUE;
         for (AudioStream s : info.getAudioStreams()) {

@@ -24,6 +24,8 @@ export const bus = createEmitter<{
   enginechange: Engine;
   /** A song is being found/downloaded before it can start. */
   loading: boolean;
+  /** "Show video" gave up (the video wouldn't start); stay on audio. */
+  videounavailable: void;
   /** Playlists were created, edited or deleted. */
   playlistschange: void;
 }>();
