@@ -15,6 +15,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import org.schabi.newpipe.extractor.Image;
 import org.schabi.newpipe.extractor.InfoItem;
 import org.schabi.newpipe.extractor.MediaFormat;
 import org.schabi.newpipe.extractor.NewPipe;
@@ -23,6 +24,7 @@ import org.schabi.newpipe.extractor.StreamingService;
 import org.schabi.newpipe.extractor.linkhandler.SearchQueryHandler;
 import org.schabi.newpipe.extractor.localization.ContentCountry;
 import org.schabi.newpipe.extractor.localization.Localization;
+import org.schabi.newpipe.extractor.playlist.PlaylistInfo;
 import org.schabi.newpipe.extractor.search.SearchInfo;
 import org.schabi.newpipe.extractor.services.youtube.ItagItem;
 import org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper;
@@ -101,7 +103,71 @@ final class YouTubeAudio {
 
     /** The YouTube video id this track was matched to, if known. */
     String knownVideoId(String key) {
+        if (key.startsWith("yt-")) return key.substring(3);
         return ids.getString(key, null);
+    }
+
+    static final class RadioTrack {
+        final String videoId;
+        final String title;
+        final String uploader;
+        final long durationSec;
+        final String thumbnail;
+
+        RadioTrack(String videoId, String title, String uploader, long durationSec, String thumbnail) {
+            this.videoId = videoId;
+            this.title = title;
+            this.uploader = uploader;
+            this.durationSec = durationSec;
+            this.thumbnail = thumbnail;
+        }
+    }
+
+    /**
+     * Endless radio: YouTube Music's own mix for a song (what it plays after
+     * it), falling back to the regular YouTube mix, then "related videos".
+     */
+    List<RadioTrack> radio(String videoId) throws Exception {
+        StreamingService yt = ServiceList.YouTube;
+        List<StreamInfoItem> items = new ArrayList<>();
+        for (String list : new String[] { "RDAMVM" + videoId, "RD" + videoId }) {
+            try {
+                items = PlaylistInfo.getInfo(yt, "https://www.youtube.com/watch?v=" + videoId + "&list=" + list).getRelatedItems();
+                if (items.size() > 1) break;
+            } catch (Exception e) {
+                Log.i(TAG, "Mix " + list + " failed: " + describe(e));
+            }
+        }
+        if (items.size() <= 1) {
+            items = new ArrayList<>();
+            for (InfoItem item : StreamInfo.getInfo(yt, "https://www.youtube.com/watch?v=" + videoId).getRelatedItems()) {
+                if (item instanceof StreamInfoItem) items.add((StreamInfoItem) item);
+            }
+        }
+        List<RadioTrack> out = new ArrayList<>();
+        for (StreamInfoItem item : items) {
+            String id;
+            try {
+                id = yt.getStreamLHFactory().getId(item.getUrl());
+            } catch (Exception e) {
+                continue;
+            }
+            if (id.equals(videoId)) continue; // the seed song itself
+            long duration = item.getDuration();
+            if (duration > 0 && (duration < 60 || duration > 15 * 60)) continue; // skip shorts and long mixes
+            String thumb = null;
+            List<Image> thumbs = item.getThumbnails();
+            int best = -1;
+            for (Image image : thumbs) {
+                if (image.getHeight() > best) {
+                    best = image.getHeight();
+                    thumb = image.getUrl();
+                }
+            }
+            out.add(new RadioTrack(id, item.getName(), item.getUploaderName(), duration, thumb));
+        }
+        if (out.isEmpty()) throw new IOException("No radio songs for " + videoId);
+        return out;
     }
 
     boolean isCached(Track track) {
@@ -112,6 +178,8 @@ final class YouTubeAudio {
     // --- Search ------------------------------------------------------------------
 
     private String resolveVideoId(Track track) throws Exception {
+        // Songs that came from YouTube itself (radio) already know their video.
+        if (track.key.startsWith("yt-")) return track.key.substring(3);
         String known = ids.getString(track.key, null);
         if (known != null) return known;
 

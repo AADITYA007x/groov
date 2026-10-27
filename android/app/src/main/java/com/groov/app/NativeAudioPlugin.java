@@ -11,6 +11,7 @@ import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.exoplayer.ExoPlayer;
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -38,6 +39,8 @@ public class NativeAudioPlugin extends Plugin {
     private final ExecutorService loader = Executors.newSingleThreadExecutor();
     /** Next song in the queue, downloaded in the background. */
     private final ExecutorService prefetcher = Executors.newSingleThreadExecutor();
+    /** Radio look-ups, so they never wait behind a download. */
+    private final ExecutorService radioWorker = Executors.newSingleThreadExecutor();
     private final AtomicInteger playToken = new AtomicInteger();
 
     private YouTubeAudio youtube;
@@ -62,6 +65,7 @@ public class NativeAudioPlugin extends Plugin {
     protected void handleOnDestroy() {
         loader.shutdownNow();
         prefetcher.shutdownNow();
+        radioWorker.shutdownNow();
         main.post(() -> {
             if (player != null) {
                 player.release();
@@ -190,6 +194,37 @@ public class NativeAudioPlugin extends Plugin {
         JSObject result = new JSObject();
         result.put("cancelled", true);
         call.resolve(result);
+    }
+
+    /** Songs for endless radio after a track: [{videoId, title, artist, durationSec, artwork}]. */
+    @PluginMethod
+    public void radio(PluginCall call) {
+        String key = call.getString("key", "");
+        String videoId = call.getString("videoId", youtube.knownVideoId(key));
+        if (videoId == null || videoId.isEmpty()) {
+            call.reject("Play the song first so it can be found on YouTube");
+            return;
+        }
+        radioWorker.execute(() -> {
+            try {
+                JSArray tracks = new JSArray();
+                for (YouTubeAudio.RadioTrack t : youtube.radio(videoId)) {
+                    JSObject o = new JSObject();
+                    o.put("videoId", t.videoId);
+                    o.put("title", t.title);
+                    o.put("artist", t.uploader);
+                    o.put("durationSec", t.durationSec);
+                    o.put("artwork", t.thumbnail);
+                    tracks.put(o);
+                }
+                JSObject result = new JSObject();
+                result.put("tracks", tracks);
+                call.resolve(result);
+            } catch (Exception e) {
+                Log.w(TAG, "Radio failed for " + videoId, e);
+                call.reject(YouTubeAudio.describe(e));
+            }
+        });
     }
 
     /** Download the next song in the background so it starts instantly. */
