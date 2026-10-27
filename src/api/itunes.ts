@@ -209,8 +209,11 @@ function normalizeChartEntry(entry: ChartEntry): Item {
   };
 }
 
-export async function fetchTrendingSongs(limit: number): Promise<Item[]> {
-  const response = await fetch(`https://itunes.apple.com/us/rss/topsongs/limit=${limit}/json`);
+/** Charts for India (the app's listeners); "us" for the US chart. */
+export const CHART_COUNTRY = "in";
+
+export async function fetchTrendingSongs(limit: number, country = CHART_COUNTRY): Promise<Item[]> {
+  const response = await fetch(`https://itunes.apple.com/${country}/rss/topsongs/limit=${limit}/json`);
   if (!response.ok) throw new Error(`Charts feed error: ${response.status}`);
   const data = (await response.json()) as { feed?: { entry?: ChartEntry[] } };
   return (data.feed?.entry || []).map(normalizeChartEntry);

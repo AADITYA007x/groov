@@ -3,7 +3,7 @@ import type { Account } from "./cloud/session";
 import type { SyncStatus } from "./cloud/sync";
 import type { FriendStatus } from "./cloud/presence";
 import type { JamInfo } from "./cloud/jam";
-import type { Engine } from "./player/player";
+import type { Engine, QueueSource } from "./player/player";
 import { createEmitter } from "./utils";
 
 /** Every track rendered anywhere, by id, so play buttons can look them up. */
@@ -43,4 +43,8 @@ export const bus = createEmitter<{
   jamchange: JamInfo;
   /** A short message at the bottom of the screen. */
   toast: string;
+  /** A new list started playing (from a list, or radio). */
+  queuechange: { source: QueueSource; remaining: number };
+  /** Shuffle or repeat changed. */
+  modechange: void;
 }>();

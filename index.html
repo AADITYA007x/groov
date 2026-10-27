@@ -70,6 +70,10 @@
 
           <main class="content">
             <section id="recent-view">
+              <div class="quick-actions">
+                <button id="surprise-btn" class="quick-action">🎲 Surprise me</button>
+                <button id="shuffle-library-btn" class="quick-action">🔀 Shuffle my library</button>
+              </div>
               <div class="section-header">
                 <h2 class="section-title">Recent searches</h2>
                 <button id="clear-recent" class="text-btn" style="display: none">
@@ -115,6 +119,8 @@
               <div class="section-header">
                 <h2 id="playlist-view-title" class="section-title"></h2>
                 <div class="playlist-actions">
+                  <button id="play-playlist-btn" class="text-btn">▶ Play</button>
+                  <button id="shuffle-playlist-btn" class="text-btn">🔀 Shuffle</button>
                   <button id="share-playlist-btn" class="text-btn" style="display: none">Share</button>
                   <button id="delete-playlist-btn" class="text-btn">Delete playlist</button>
                 </div>
@@ -186,13 +192,16 @@
           <div class="np-times"><span id="np-elapsed">0:00</span><span id="np-total">0:00</span></div>
         </div>
         <div class="np-controls">
+          <button id="np-shuffle" class="np-mode" aria-label="Shuffle" title="Shuffle">🔀</button>
           <button id="np-prev" class="np-skip" aria-label="Previous">⏮</button>
           <button id="np-toggle" class="np-play" aria-label="Play">▶</button>
           <button id="np-next" class="np-skip" aria-label="Next">⏭</button>
+          <button id="np-repeat" class="np-mode" aria-label="Repeat" title="Repeat">🔁</button>
         </div>
         <div class="np-extra">
           <button id="np-lyrics" class="np-pill">Lyrics</button>
-          <button id="np-add" class="np-pill">+ Add to playlist</button>
+          <button id="np-add" class="np-pill">+ Playlist</button>
+          <button id="np-radio" class="np-pill">📻 Radio</button>
         </div>
       </div>
     </div>

@@ -37,7 +37,8 @@ function trackButtonsMarkup(item: Item, category: Category): string {
   if (category !== "tracks") return "";
   registerTrack(item);
   let html = "";
-  if (item.previewUrl) html += playButton("play-overlay", item.id);
+  // Every song is playable: full songs on Android, YouTube or the preview elsewhere.
+  html += playButton("play-overlay", item.id);
   html += `<button class="add-overlay" data-id="${escapeHtml(item.id)}" aria-label="Add to playlist">+</button>`;
   return html;
 }

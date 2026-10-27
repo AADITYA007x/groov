@@ -3,6 +3,7 @@
 import { deletePlaylist, getPlaylists, isOwner, removeTrackFromPlaylist, createPlaylist } from "../library/playlists";
 import { getAccount } from "../cloud/session";
 import { sharePlaylist } from "../cloud/sync";
+import { playPlaylist } from "../player/radio";
 import type { Playlist } from "../types";
 import { bus } from "../state";
 import { $ } from "../utils";
@@ -112,6 +113,9 @@ function renderPlaylistMeta(playlist: Playlist): void {
   playlistMetaEl.textContent = meta;
   playlistMetaEl.style.display = meta ? "block" : "none";
   shareBtn.style.display = owner && getAccount() ? "inline-flex" : "none";
+  const hasSongs = playlist.tracks.length > 0;
+  $("play-playlist-btn").style.display = hasSongs ? "inline-flex" : "none";
+  $("shuffle-playlist-btn").style.display = playlist.tracks.length > 1 ? "inline-flex" : "none";
   deleteBtn.textContent = owner ? "Delete playlist" : "Leave playlist";
 }
 
@@ -153,6 +157,9 @@ export function initViews(): void {
     if (name === null) return;
     navigateToPlaylist(createPlaylist(name || "New Playlist"));
   });
+
+  $("play-playlist-btn").addEventListener("click", () => void playPlaylist(currentView));
+  $("shuffle-playlist-btn").addEventListener("click", () => void playPlaylist(currentView, true));
 
   shareBtn.addEventListener("click", async () => {
     const playlist = getPlaylists()[currentView];

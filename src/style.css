@@ -1858,3 +1858,70 @@ body.np-open {
   opacity: 1;
   transform: translate(-50%, 0);
 }
+
+/* --- Shuffle / repeat / radio / quick actions ------------------------------------ */
+
+.np-controls {
+  gap: 14px;
+}
+
+.np-mode {
+  width: 42px;
+  height: 42px;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  font-size: 18px;
+  cursor: pointer;
+  opacity: 0.45;
+  filter: grayscale(1);
+  position: relative;
+  transition: opacity 0.15s ease, filter 0.15s ease;
+}
+
+.np-mode.active {
+  opacity: 1;
+  filter: none;
+}
+
+.np-mode.active::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: var(--accent-2-bright);
+}
+
+.quick-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 4px 0 18px;
+}
+
+.quick-action {
+  flex: 1;
+  min-width: 140px;
+  border: 1px solid var(--glass-border);
+  background: linear-gradient(135deg, rgba(46, 63, 143, 0.45), rgba(212, 175, 55, 0.2));
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+  padding: 14px 16px;
+  border-radius: 14px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.quick-action:active {
+  transform: scale(0.98);
+}
+
+.playlist-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}

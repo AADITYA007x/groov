@@ -12,11 +12,16 @@ import {
   getCurrentTrackId,
   lastNativeError,
   canShowVideo,
+  cycleRepeat,
+  getRepeatMode,
+  isShuffleOn,
+  toggleShuffle,
   isVideoPending,
   startVideo,
   stopVideo,
 } from "../player/player";
 import { openLyrics } from "../player/lyrics";
+import { getRadioSeed, startRadio } from "../player/radio";
 import { bus } from "../state";
 import type { Item } from "../types";
 import { $, cssEscape, formatTime } from "../utils";
@@ -153,9 +158,24 @@ const ENGINE_LABELS = {
   audio: "30s preview",
 } as const;
 
+function renderModes(): void {
+  const shuffleBtn = $("np-shuffle");
+  const repeatBtn = $("np-repeat");
+  const repeat = getRepeatMode();
+  shuffleBtn.classList.toggle("active", isShuffleOn());
+  repeatBtn.classList.toggle("active", repeat !== "off");
+  repeatBtn.textContent = repeat === "one" ? "🔂" : "🔁";
+  repeatBtn.title = repeat === "one" ? "Repeat this song" : repeat === "all" ? "Repeat all" : "Repeat off";
+}
+
 function renderEngine(): void {
   const engine = getEngine();
-  npLabel.textContent = currentItem ? `Now playing · ${ENGINE_LABELS[engine]}` : "Now playing";
+  const radio = getRadioSeed();
+  npLabel.textContent = !currentItem
+    ? "Now playing"
+    : radio
+      ? `📻 Radio · ${radio}`
+      : `Now playing · ${ENGINE_LABELS[engine]}`;
   npLabel.title = engine !== "native" && lastNativeError ? `Full song failed: ${lastNativeError}` : "";
   npVideoBtn.style.visibility = canShowVideo() ? "visible" : "hidden";
   if (engine === "audio" && videoMode) void setVideoMode(false);
@@ -203,6 +223,19 @@ export function initNowPlaying(): void {
   $("np-close").addEventListener("click", () => close());
   npVideoBtn.addEventListener("click", () => void setVideoMode(!videoMode));
   $("np-lyrics").addEventListener("click", () => openLyrics());
+  $("np-shuffle").addEventListener("click", () => {
+    toggleShuffle();
+    bus.emit("toast", isShuffleOn() ? "🔀 Shuffle on" : "Shuffle off");
+  });
+  $("np-repeat").addEventListener("click", () => {
+    cycleRepeat();
+    const mode = getRepeatMode();
+    bus.emit("toast", mode === "one" ? "🔂 Repeating this song" : mode === "all" ? "🔁 Repeat all" : "Repeat off");
+  });
+  $("np-radio").addEventListener("click", () => void startRadio());
+  bus.on("modechange", renderModes);
+  bus.on("queuechange", () => renderEngine());
+  renderModes();
   $("np-add").addEventListener("click", (e) => {
     e.stopPropagation();
     const id = getCurrentTrackId();

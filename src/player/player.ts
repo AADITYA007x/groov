@@ -17,7 +17,7 @@ import { getYoutubeApiKey } from "../config";
 import { findYoutubeVideoId, loadYoutubeIframeApi } from "../api/youtube";
 import { bus, trackRegistry } from "../state";
 import type { Item } from "../types";
-import { $ } from "../utils";
+import { $, storage } from "../utils";
 import { hasNativeAudio, nativeAudio, toNativeTrack } from "./native-audio";
 
 export type Engine = "audio" | "youtube" | "native";
@@ -251,6 +251,11 @@ function onPlaybackPaused(): void {
 }
 
 function onPlaybackEnded(): void {
+  if (repeatMode === "one") {
+    seekTo(0);
+    play();
+    return;
+  }
   onPlaybackPaused();
   void playNextInQueue();
 }
@@ -270,11 +275,75 @@ export function isPlaying(): boolean {
 
 // --- Queue --------------------------------------------------------------------
 // Autoplay continues through whichever grid or playlist the current track was
-// started from, in the order it appears there.
+// started from, in the order it appears there (or shuffled).
 
-export function setQueue(ids: string[], startId: string): void {
-  currentQueue = ids.length ? ids : [startId];
+export type QueueSource = "list" | "radio";
+export type RepeatMode = "off" | "all" | "one";
+
+let queueSource: QueueSource = "list";
+/** The list as it was given, for turning shuffle back off. */
+let originalQueue: string[] = [];
+let shuffleOn = storage.get<boolean>("groov:shuffle", false);
+let repeatMode = storage.get<RepeatMode>("groov:repeat", "off");
+
+function shuffled<T>(items: T[]): T[] {
+  const a = [...items];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+export function setQueue(ids: string[], startId: string, source: QueueSource = "list"): void {
+  const list = [...new Set(ids.length ? ids : [startId])];
+  originalQueue = list;
+  queueSource = source;
+  currentQueue = shuffleOn ? [startId, ...shuffled(list.filter((id) => id !== startId))] : list;
   currentQueueIndex = Math.max(0, currentQueue.indexOf(startId));
+  bus.emit("queuechange", { source, remaining: currentQueue.length - 1 - currentQueueIndex });
+}
+
+/** Add songs to the end of the queue (radio keeps it topped up). */
+export function appendToQueue(ids: string[]): void {
+  const fresh = ids.filter((id) => !originalQueue.includes(id));
+  originalQueue.push(...fresh);
+  currentQueue.push(...(shuffleOn ? shuffled(fresh) : fresh));
+}
+
+export function getQueueInfo(): { source: QueueSource; remaining: number; lastId: string | null } {
+  return {
+    source: queueSource,
+    remaining: Math.max(0, currentQueue.length - 1 - currentQueueIndex),
+    lastId: currentQueue[currentQueue.length - 1] ?? null,
+  };
+}
+
+export function isShuffleOn(): boolean {
+  return shuffleOn;
+}
+
+export function getRepeatMode(): RepeatMode {
+  return repeatMode;
+}
+
+export function toggleShuffle(): void {
+  shuffleOn = !shuffleOn;
+  storage.set("groov:shuffle", shuffleOn);
+  const current = currentQueue[currentQueueIndex];
+  if (current) {
+    currentQueue = shuffleOn
+      ? [current, ...shuffled(originalQueue.filter((id) => id !== current))]
+      : [...originalQueue];
+    currentQueueIndex = Math.max(0, currentQueue.indexOf(current));
+  }
+  bus.emit("modechange", undefined);
+}
+
+export function cycleRepeat(): void {
+  repeatMode = repeatMode === "off" ? "all" : repeatMode === "all" ? "one" : "off";
+  storage.set("groov:repeat", repeatMode);
+  bus.emit("modechange", undefined);
 }
 
 export function queueFromElement(el: HTMLElement): void {
@@ -288,7 +357,8 @@ export function queueFromElement(el: HTMLElement): void {
   setQueue(ids, id);
 }
 
-const hasNext = () => currentQueueIndex >= 0 && currentQueueIndex < currentQueue.length - 1;
+const hasNext = () =>
+  currentQueueIndex >= 0 && (currentQueueIndex < currentQueue.length - 1 || (repeatMode === "all" && currentQueue.length > 1));
 
 async function playQueueIndex(index: number): Promise<void> {
   const id = currentQueue[index];
@@ -298,7 +368,14 @@ async function playQueueIndex(index: number): Promise<void> {
 }
 
 async function playNextInQueue(): Promise<void> {
-  if (hasNext()) await playQueueIndex(currentQueueIndex + 1);
+  if (!hasNext()) return;
+  if (currentQueueIndex >= currentQueue.length - 1) {
+    // Repeat all: start over (in a new random order if shuffling).
+    if (shuffleOn) currentQueue = shuffled(originalQueue);
+    await playQueueIndex(0);
+    return;
+  }
+  await playQueueIndex(currentQueueIndex + 1);
 }
 
 // Listening along with someone: their queue decides what's next, so
@@ -389,8 +466,9 @@ export async function playTrack(id: string): Promise<void> {
     }
   }
 
-  let youtubeId: string | null = null;
-  if (getYoutubeApiKey()) {
+  // Songs from YouTube itself (radio) know their video: no key needed.
+  let youtubeId: string | null = item.id.startsWith("yt-") ? item.id.slice(3) : null;
+  if (!youtubeId && getYoutubeApiKey()) {
     try {
       youtubeId = await findYoutubeVideoId(item);
     } catch {

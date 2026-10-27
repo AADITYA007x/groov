@@ -7,6 +7,7 @@ import { initSync } from "./cloud/sync";
 import { initPresence } from "./cloud/presence";
 import { initJam } from "./cloud/jam";
 import { initFriends } from "./ui/friends";
+import { initRadio, shuffleLibrary, surpriseMe } from "./player/radio";
 import { initAccount } from "./ui/account";
 import { initBack } from "./ui/back";
 import { initLayout } from "./ui/layout";
@@ -36,3 +37,6 @@ initJam();
 initFriends();
 initSession(); // last: its first auth event drives sync and the UI
 initSearch();
+initRadio();
+document.getElementById("surprise-btn")!.addEventListener("click", () => void surpriseMe());
+document.getElementById("shuffle-library-btn")!.addEventListener("click", () => void shuffleLibrary());
