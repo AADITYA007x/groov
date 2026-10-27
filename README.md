@@ -36,6 +36,14 @@ and songs you've played before don't count again.
 To get a key: Google Cloud Console → create a project → **APIs & Services → Library** →
 enable "YouTube Data API v3" → **Credentials → Create credentials → API key**.
 
+## Accounts and sync (Supabase)
+
+Sign-in, synced playlists, shared playlists and play history use a free
+[Supabase](https://supabase.com) project. The URL and publishable key are in
+`src/cloud/client.ts` (they're meant to ship in apps); access is enforced by
+row-level security in [`supabase/schema.sql`](supabase/schema.sql). Run that
+file once in Supabase's SQL Editor to set up a new project.
+
 ## Develop
 
 Needs [Node.js 22+](https://nodejs.org/).
@@ -97,7 +105,7 @@ keyPassword=…
 ## Roadmap
 
 1. ~~Proper project: Vite + TypeScript, CI-built signed APK~~
-2. Spotify-style playback: background and screen-off play, lock-screen and notification controls, media keys
-3. Full songs from YouTube audio streams with no search quota, plus offline downloads
-4. For the two of us: login, synced and shared playlists, listen together
+2. ~~Spotify-style playback: background and screen-off play, lock-screen and notification controls, media keys~~
+3. ~~Full songs from YouTube audio streams with no search quota, plus offline downloads~~
+4. For the two of us: ~~login, synced and shared playlists~~, listen together
 5. Discovery and polish: Last.fm recommendations, Deezer charts, artist pages, stats, crossfade

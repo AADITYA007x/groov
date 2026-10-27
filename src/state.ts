@@ -1,4 +1,6 @@
 import type { Item } from "./types";
+import type { Account } from "./cloud/session";
+import type { SyncStatus } from "./cloud/sync";
 import type { Engine } from "./player/player";
 import { createEmitter } from "./utils";
 
@@ -28,4 +30,9 @@ export const bus = createEmitter<{
   videounavailable: void;
   /** Playlists were created, edited or deleted. */
   playlistschange: void;
+  /** Signed in (the account) or out (null). */
+  authchange: Account | null;
+  /** A change was queued for the account. */
+  outbox: void;
+  syncstatus: SyncStatus;
 }>();

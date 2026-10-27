@@ -29,6 +29,12 @@
         <div id="theme-swatches" class="theme-swatches"></div>
 
         <div class="sidebar-header">
+          <span>Account</span>
+        </div>
+        <button id="account-btn" class="sidebar-setting">Sign in to sync playlists</button>
+        <div id="sync-status" class="sidebar-version"></div>
+
+        <div class="sidebar-header">
           <span>Settings</span>
         </div>
         <button id="youtube-key-btn" class="sidebar-setting"></button>
@@ -99,8 +105,12 @@
             <section id="playlist-view" style="display: none">
               <div class="section-header">
                 <h2 id="playlist-view-title" class="section-title"></h2>
-                <button id="delete-playlist-btn" class="text-btn">Delete playlist</button>
+                <div class="playlist-actions">
+                  <button id="share-playlist-btn" class="text-btn" style="display: none">Share</button>
+                  <button id="delete-playlist-btn" class="text-btn">Delete playlist</button>
+                </div>
               </div>
+              <p id="playlist-meta" class="playlist-meta muted" style="display: none"></p>
               <div id="playlist-track-list" class="playlist-track-list"></div>
               <p id="playlist-empty" class="muted" style="display: none">
                 This playlist is empty. Search for songs and use "Add to
@@ -177,6 +187,29 @@
     <!-- The one YouTube player. Invisible unless "Show video" is on; CSS
          positions it, the DOM never moves (that would restart the song). -->
     <div id="yt-host" class="yt-host"><div id="youtube-player"></div></div>
+
+    <div id="account-dialog" class="dialog-backdrop" style="display: none">
+      <form id="account-form" class="dialog" autocomplete="on">
+        <h2 id="account-title" class="dialog-title">Sign in</h2>
+        <p class="dialog-sub muted">Sync your playlists across devices and share them.</p>
+        <label id="account-name-row" class="field" style="display: none">
+          <span>Your name</span>
+          <input id="account-name" type="text" maxlength="40" autocomplete="nickname" placeholder="e.g. Aaditya" />
+        </label>
+        <label class="field">
+          <span>Email</span>
+          <input id="account-email" type="email" required autocomplete="email" inputmode="email" />
+        </label>
+        <label class="field">
+          <span>Password</span>
+          <input id="account-password" type="password" required minlength="6" autocomplete="current-password" />
+        </label>
+        <p id="account-error" class="dialog-error" style="display: none"></p>
+        <button id="account-submit" type="submit" class="dialog-primary">Sign in</button>
+        <button id="account-switch" type="button" class="text-btn dialog-switch">New here? Create an account</button>
+        <button id="account-cancel" type="button" class="dialog-close" aria-label="Close">✕</button>
+      </form>
+    </div>
 
     <div id="lyrics-overlay" class="lyrics-overlay" style="display: none">
       <div class="lyrics-panel">

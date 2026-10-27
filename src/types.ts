@@ -19,6 +19,15 @@ export interface Playlist {
   id: string;
   name: string;
   tracks: Item[];
+  /** Saved to the account (synced), not just this device. */
+  cloud?: boolean;
+  ownerId?: string;
+  ownerName?: string;
+  /** Shared with other people (they can add and remove songs). */
+  shared?: boolean;
+  members?: { id: string; name: string }[];
+  /** track id -> who added it, for shared playlists. */
+  addedBy?: Record<string, { id: string | null; name: string }>;
 }
 
 export type Playlists = Record<string, Playlist>;

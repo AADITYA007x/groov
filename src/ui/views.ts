@@ -1,6 +1,9 @@
 // Navigation between the search/home view and playlist views, plus the
 // sidebar playlist list.
-import { deletePlaylist, getPlaylists, removeTrackFromPlaylist, createPlaylist } from "../library/playlists";
+import { deletePlaylist, getPlaylists, isOwner, removeTrackFromPlaylist, createPlaylist } from "../library/playlists";
+import { getAccount } from "../cloud/session";
+import { sharePlaylist } from "../cloud/sync";
+import type { Playlist } from "../types";
 import { bus } from "../state";
 import { $ } from "../utils";
 import { playlistRowMarkup } from "./cards";
@@ -18,6 +21,9 @@ const playlistViewEl = $("playlist-view");
 const playlistViewTitle = $("playlist-view-title");
 const playlistTrackListEl = $("playlist-track-list");
 const playlistEmptyEl = $("playlist-empty");
+const playlistMetaEl = $("playlist-meta");
+const shareBtn = $("share-playlist-btn");
+const deleteBtn = $("delete-playlist-btn");
 
 /** "search" or a playlist id. */
 let currentView = "search";
@@ -62,7 +68,7 @@ export function renderPlaylistNav(): void {
     const btn = document.createElement("button");
     btn.className = `playlist-nav-item${currentView === id ? " active" : ""}`;
     btn.dataset.id = id;
-    btn.textContent = playlists[id].name;
+    btn.textContent = (playlists[id].shared ? "👥 " : "") + playlists[id].name;
     btn.addEventListener("click", () => {
       navigateToPlaylist(id);
       closeSidebar();
@@ -78,8 +84,35 @@ function renderPlaylistView(id: string): void {
     return;
   }
   playlistViewTitle.textContent = playlist.name;
+  renderPlaylistMeta(playlist);
   playlistEmptyEl.style.display = playlist.tracks.length ? "none" : "block";
-  playlistTrackListEl.innerHTML = playlist.tracks.map((item) => playlistRowMarkup(id, item)).join("");
+  const me = getAccount()?.id;
+  playlistTrackListEl.innerHTML = playlist.tracks
+    .map((item) => {
+      const by = playlist.shared ? playlist.addedBy?.[item.id] : undefined;
+      return playlistRowMarkup(id, item, by && by.id !== me ? by.name : undefined);
+    })
+    .join("");
+}
+
+/** "Shared with Neha" / "Shared by Neha", Share / Delete / Leave buttons. */
+function renderPlaylistMeta(playlist: Playlist): void {
+  const owner = isOwner(playlist);
+  const me = getAccount()?.id;
+  let meta = "";
+  if (playlist.shared && owner) {
+    const names = (playlist.members ?? []).map((m) => m.name);
+    meta = names.length ? `👥 Shared with ${names.join(", ")}` : "";
+  } else if (playlist.shared) {
+    const others = (playlist.members ?? []).filter((m) => m.id !== me).map((m) => m.name);
+    meta = `👥 Shared by ${playlist.ownerName ?? "someone"}` + (others.length ? ` · also ${others.join(", ")}` : "");
+  } else if (!playlist.cloud) {
+    meta = getAccount() ? "" : "Only on this device · sign in to sync and share";
+  }
+  playlistMetaEl.textContent = meta;
+  playlistMetaEl.style.display = meta ? "block" : "none";
+  shareBtn.style.display = owner && getAccount() ? "inline-flex" : "none";
+  deleteBtn.textContent = owner ? "Delete playlist" : "Leave playlist";
 }
 
 export function navigateToPlaylist(id: string, record = true): void {
@@ -121,12 +154,39 @@ export function initViews(): void {
     navigateToPlaylist(createPlaylist(name || "New Playlist"));
   });
 
-  $("delete-playlist-btn").addEventListener("click", () => {
+  shareBtn.addEventListener("click", async () => {
+    const playlist = getPlaylists()[currentView];
+    if (!playlist) return;
+    const email = prompt(`Share "${playlist.name}" with…\nEnter their Groov account email:`);
+    if (!email?.trim()) return;
+    shareBtn.textContent = "Sharing…";
+    try {
+      const name = await sharePlaylist(playlist.id, email);
+      alert(`Shared with ${name}. They can now add and remove songs.`);
+    } catch (err) {
+      alert(`Couldn't share: ${(err as Error).message}`);
+    } finally {
+      shareBtn.textContent = "Share";
+    }
+  });
+
+  deleteBtn.addEventListener("click", () => {
     if (currentView === "search") return;
-    const name = getPlaylists()[currentView]?.name || "this playlist";
-    if (!confirm(`Delete "${name}"? This can't be undone.`)) return;
+    const playlist = getPlaylists()[currentView];
+    const name = playlist?.name || "this playlist";
+    const question = playlist && !isOwner(playlist)
+      ? `Leave "${name}"? It will disappear from your playlists.`
+      : playlist?.shared
+        ? `Delete "${name}" for everyone it's shared with? This can't be undone.`
+        : `Delete "${name}"? This can't be undone.`;
+    if (!confirm(question)) return;
     deletePlaylist(currentView);
     navigateToSearch(false);
+  });
+
+  bus.on("authchange", () => {
+    renderPlaylistNav();
+    if (currentView !== "search") renderPlaylistView(currentView);
   });
 
   bus.on("playlistschange", () => {

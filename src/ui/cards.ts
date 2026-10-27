@@ -71,7 +71,8 @@ export function topResultMarkup(item: Item, category: Category): string {
   `;
 }
 
-export function playlistRowMarkup(playlistId: string, item: Item): string {
+/** addedBy: "added by Neha" on shared playlists (omit for your own songs). */
+export function playlistRowMarkup(playlistId: string, item: Item, addedBy?: string): string {
   registerTrack(item);
   const art = item.artwork
     ? `<img class="playlist-row-art" src="${escapeHtml(item.artwork)}" alt="" />`
@@ -84,7 +85,9 @@ export function playlistRowMarkup(playlistId: string, item: Item): string {
       </div>
       <div class="playlist-row-info">
         <div class="playlist-row-name">${escapeHtml(item.name)}</div>
-        <div class="playlist-row-subtitle">${escapeHtml(item.subtitle)}</div>
+        <div class="playlist-row-subtitle">${escapeHtml(item.subtitle)}${
+          addedBy ? ` · <span class="playlist-row-added-by">added by ${escapeHtml(addedBy)}</span>` : ""
+        }</div>
       </div>
       <button class="playlist-row-remove" data-playlist="${escapeHtml(playlistId)}" data-track="${escapeHtml(item.id)}" aria-label="Remove from playlist">✕</button>
     </div>
