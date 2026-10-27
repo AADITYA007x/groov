@@ -16,6 +16,10 @@ interface NativeAudioPlugin {
   radio(o: { key: string; videoId?: string }): Promise<{
     tracks: { videoId: string; title: string; artist: string; durationSec: number; artwork: string | null }[];
   }>;
+  crossfade(o: NativeTrack & { seconds: number }): Promise<{ cancelled: boolean; videoId?: string | null }>;
+  storageInfo(): Promise<{ bytes: number; songs: number; limitMb: number }>;
+  setCacheLimit(o: { mb: number }): Promise<void>;
+  clearCache(): Promise<{ deleted: number }>;
   resume(): Promise<void>;
   pause(): Promise<void>;
   seek(o: { position: number }): Promise<void>;

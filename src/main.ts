@@ -19,6 +19,10 @@ import { initTheme } from "./ui/theme";
 import { initViews } from "./ui/views";
 import { initDetail } from "./ui/detail";
 import { initQueue } from "./ui/queue";
+import { initHistory } from "./library/history";
+import { initSleep } from "./ui/sleep";
+import { initStats } from "./ui/stats";
+import { initHome } from "./ui/home";
 
 // Order matters for the document-level click handlers: play buttons first,
 // then add-to-playlist, then the plain card click (see ui/popover.ts).
@@ -33,6 +37,10 @@ initPopover();
 initViews();
 initDetail();
 initQueue();
+initSleep();
+initStats();
+initHome();
+initHistory();
 initSettings();
 initAccount();
 initSync();

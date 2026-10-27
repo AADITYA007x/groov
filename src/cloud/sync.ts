@@ -214,29 +214,6 @@ export async function sharePlaylist(playlistId: string, friendEmail: string): Pr
   return data as string;
 }
 
-// --- Play history -----------------------------------------------------------------
-// Counts a play once a song has played 30 seconds (like most music apps).
-
-let loggedTrackId: string | null = null;
-let currentItem: Item | null = null;
-
-function watchPlays(): void {
-  bus.on("trackchange", (item) => {
-    currentItem = item;
-    loggedTrackId = null;
-  });
-  bus.on("progress", ({ currentTime }) => {
-    if (!currentItem || loggedTrackId === currentItem.id || currentTime < 30) return;
-    loggedTrackId = currentItem.id;
-    const { id, name, subtitle, artwork, artistId, genre, durationMs } = currentItem;
-    enqueue({
-      type: "logPlay",
-      track: { id, name, subtitle, artwork, artistId, genre, durationMs, topSubtitle: "" },
-      playedAt: new Date().toISOString(),
-    });
-  });
-}
-
 // --- Sign in / out ----------------------------------------------------------------
 
 const MIGRATED_KEY = "groov:migrated-to";
@@ -308,5 +285,4 @@ export function initSync(): void {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && getAccount()) schedulePull(0);
   });
-  watchPlays();
 }

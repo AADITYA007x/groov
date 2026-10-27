@@ -16,6 +16,9 @@
         <button id="nav-search" class="sidebar-link active">
           <span class="sidebar-icon">⌕</span> Search
         </button>
+        <button id="nav-stats" class="sidebar-link">
+          <span class="sidebar-icon">📊</span> Your stats
+        </button>
 
         <div class="sidebar-header">
           <span>Your Playlists</span>
@@ -47,6 +50,8 @@
         </div>
         <button id="youtube-key-btn" class="sidebar-setting"></button>
         <button id="background-play-btn" class="sidebar-setting" style="display: none"></button>
+        <button id="crossfade-btn" class="sidebar-setting" style="display: none"></button>
+        <button id="storage-btn" class="sidebar-setting" style="display: none"></button>
         <div id="app-version" class="sidebar-version"></div>
       </aside>
 
@@ -91,6 +96,16 @@
                 <div id="trending-grid" class="card-grid"></div>
               </div>
 
+              <div id="made-for-you-section" class="category-section" style="display: none">
+                <h2 class="section-title">Made for you</h2>
+                <div id="made-for-you" class="mix-row"></div>
+              </div>
+
+              <div id="recently-played-section" class="category-section" style="display: none">
+                <h2 class="section-title">Recently played</h2>
+                <div id="recently-played-grid" class="card-grid"></div>
+              </div>
+
               <div id="recommendations-section" class="category-section" style="display: none">
                 <h2 class="section-title">Recommended for you</h2>
                 <div id="recommendations-container"></div>
@@ -114,6 +129,8 @@
                 </p>
               </div>
             </section>
+
+            <section id="stats-view" class="stats-view" style="display: none"></section>
 
             <section id="detail-view" style="display: none">
               <div class="detail-header">
@@ -222,6 +239,7 @@
           <button id="np-add" class="np-pill">+ Playlist</button>
           <button id="np-radio" class="np-pill">📻 Radio</button>
           <button id="np-queue" class="np-pill">☰ Up next</button>
+          <button id="np-sleep" class="np-pill">🌙 Sleep</button>
         </div>
       </div>
     </div>

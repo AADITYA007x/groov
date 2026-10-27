@@ -374,7 +374,9 @@ public class NativeAudioPlugin extends Plugin {
     @PluginMethod
     public void resume(PluginCall call) {
         main.post(() -> {
-            if (player != null) player.play();
+            if (player == null) return;
+            if (player.getPlaybackState() == Player.STATE_ENDED) player.seekTo(0);
+            player.play();
         });
         call.resolve();
     }

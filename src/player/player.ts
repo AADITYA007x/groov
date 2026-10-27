@@ -192,6 +192,7 @@ function initNativeEngine(): void {
       bus.emit("durationchange", duration);
     }
     emitProgress();
+    maybeCrossfade();
   });
   void nativeAudio.addListener("ended", () => {
     if (activeEngine !== "native") return;
@@ -251,6 +252,15 @@ function onPlaybackPaused(): void {
 }
 
 function onPlaybackEnded(): void {
+  if (stopAfterCurrent) {
+    // Sleep timer "end of song": stop here, ready to play the next one.
+    stopAfterCurrent = false;
+    resumeGoesToNext = true;
+    bus.emit("sleepchange", undefined);
+    if (activeEngine === "native") void nativeAudio.pause().catch(() => undefined);
+    onPlaybackPaused();
+    return;
+  }
   if (repeatMode === "one") {
     seekTo(0);
     play();
@@ -500,6 +510,76 @@ export async function playPrevious(): Promise<void> {
   await playQueueIndex(currentQueueIndex - 1);
 }
 
+// --- Sleep timer: stop when this song ends ----------------------------------------
+
+let stopAfterCurrent = false;
+/** Stopped by the sleep timer at a song's end: Play carries on with the next. */
+let resumeGoesToNext = false;
+
+export function setStopAfterCurrent(on: boolean): void {
+  stopAfterCurrent = on;
+}
+
+export function isStopAfterCurrent(): boolean {
+  return stopAfterCurrent;
+}
+
+// --- Crossfade (Android): fade into the next song before this one ends -------------
+
+let crossfadeSeconds = storage.get<number>("groov:crossfade", 0);
+/** The song a crossfade was tried for (once per song). */
+let crossfadeTriedFor: string | null = null;
+
+export function getCrossfadeSeconds(): number {
+  return crossfadeSeconds;
+}
+
+export function setCrossfadeSeconds(seconds: number): void {
+  crossfadeSeconds = seconds;
+  storage.set("groov:crossfade", seconds);
+}
+
+function nextQueueIndex(): number {
+  if (!hasNext()) return -1;
+  return currentQueueIndex >= currentQueue.length - 1 ? 0 : currentQueueIndex + 1;
+}
+
+function maybeCrossfade(): void {
+  if (!crossfadeSeconds || !currentTrackId || crossfadeTriedFor === currentTrackId) return;
+  if (!nativePlaying || videoFromNative || stopAfterCurrent || repeatMode === "one" || skipInterceptor) return;
+  if (nativeDuration < crossfadeSeconds * 3) return; // short clip: just play through
+  if (nativeDuration - nativePositionNow() > crossfadeSeconds) return;
+  const index = nextQueueIndex();
+  if (index < 0) return;
+  // Repeat all wraps to a reshuffled start: leave that to the normal path.
+  if (index === 0 && shuffleOn) return;
+  const next = trackRegistry.get(currentQueue[index]);
+  if (!next) return;
+  crossfadeTriedFor = currentTrackId;
+  const fromId = currentTrackId;
+  nativeAudio
+    .crossfade({ ...toNativeTrack(next), seconds: crossfadeSeconds })
+    .then(({ cancelled, videoId }) => {
+      if (cancelled || currentTrackId !== fromId) return;
+      // The next song is now playing: catch everything up, like playTrack.
+      if (index === currentQueueIndex + 1 && manualCount > 0) manualCount--;
+      currentQueueIndex = index;
+      cancelHandover();
+      currentTrackId = next.id;
+      nativeVideoId = videoId ?? null;
+      nativePosition = 0;
+      nativePositionAt = Date.now();
+      nativeDuration = 0;
+      nativePlaying = true;
+      queueUpdated();
+      bus.emit("trackchange", next);
+      emitProgressReset();
+      bus.emit("playstate", true);
+      prefetchNext();
+    })
+    .catch(() => undefined); // not downloaded yet: the song plays to the end as usual
+}
+
 // --- Public controls ----------------------------------------------------------
 
 function stopActiveEngine(): void {
@@ -530,6 +610,7 @@ export async function playTrack(id: string): Promise<void> {
   }
 
   stopActiveEngine();
+  resumeGoesToNext = false;
   const previousId = currentTrackId;
   currentTrackId = id;
   if (previousId) bus.emit("playstate", false);
@@ -707,6 +788,14 @@ export function stopVideo(): void {
 }
 
 export function togglePlayback(): void {
+  if (resumeGoesToNext) {
+    resumeGoesToNext = false;
+    if (hasNext()) {
+      void playNextInQueue();
+      return;
+    }
+    seekTo(0);
+  }
   if (activeEngine === "native") {
     void (nativePlaying ? nativeAudio.pause() : nativeAudio.resume()).catch(() => undefined);
   } else if (activeEngine === "youtube" && yt) {

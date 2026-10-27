@@ -8,6 +8,7 @@ import { isShuffleOn, toggleShuffle } from "../player/player";
 import { findArtistId } from "../api/itunes";
 import { renderDetail } from "./detail";
 import { isLikedPlaylist } from "../library/liked";
+import { renderStats } from "./stats";
 
 function renderShuffleToggle(): void {
   const btn = $("shuffle-playlist-btn");
@@ -38,8 +39,10 @@ const playlistMetaEl = $("playlist-meta");
 const shareBtn = $("share-playlist-btn");
 const deleteBtn = $("delete-playlist-btn");
 const detailViewEl = $("detail-view");
+const statsViewEl = $("stats-view");
+const navStatsBtn = $("nav-stats");
 
-/** "search", a playlist id, "artist:<id>:<name>" or "album:<id>". */
+/** "search", "stats", a playlist id, "artist:<id>:<name>" or "album:<id>". */
 let currentView = "search";
 let viewStepCount = 0;
 
@@ -53,6 +56,7 @@ function recordViewChange(): void {
 
 export function navigateTo(view: string, record = true): void {
   if (view === "search") navigateToSearch(record);
+  else if (view === "stats") navigateToStats(record);
   else if (isDetail(view)) navigateToDetail(view, record);
   else navigateToPlaylist(view, record);
 }
@@ -63,6 +67,20 @@ function hideMainSections(): void {
   loadingView.style.display = "none";
   playlistViewEl.style.display = "none";
   detailViewEl.style.display = "none";
+  statsViewEl.style.display = "none";
+  navStatsBtn.classList.remove("active");
+}
+
+export function navigateToStats(record = true): void {
+  if (record && currentView !== "stats") recordViewChange();
+  currentView = "stats";
+  hideMainSections();
+  statsViewEl.style.display = "block";
+  navSearchBtn.classList.remove("active");
+  navStatsBtn.classList.add("active");
+  renderPlaylistNav();
+  renderStats();
+  window.scrollTo({ top: 0 });
 }
 
 function navigateToDetail(view: string, record = true): void {
@@ -102,6 +120,8 @@ export function showView(view: SearchSubview): void {
   }
   playlistViewEl.style.display = "none";
   detailViewEl.style.display = "none";
+  statsViewEl.style.display = "none";
+  navStatsBtn.classList.remove("active");
   recentView.style.display = view === "recent" ? "block" : "none";
   resultsView.style.display = view === "results" ? "block" : "none";
   loadingView.style.display = view === "loading" ? "block" : "none";
@@ -194,6 +214,8 @@ export function navigateToSearch(record = true): void {
   currentView = "search";
   playlistViewEl.style.display = "none";
   detailViewEl.style.display = "none";
+  statsViewEl.style.display = "none";
+  navStatsBtn.classList.remove("active");
   navSearchBtn.classList.add("active");
   renderPlaylistNav();
   showView(searchInput.value.trim() ? "results" : "recent");
@@ -217,6 +239,10 @@ export function initViews(): void {
 
   navSearchBtn.addEventListener("click", () => {
     navigateToSearch();
+    closeSidebar();
+  });
+  navStatsBtn.addEventListener("click", () => {
+    navigateToStats();
     closeSidebar();
   });
 

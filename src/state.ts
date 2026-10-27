@@ -51,4 +51,8 @@ export const bus = createEmitter<{
   queueupdate: void;
   /** A song was liked or unliked. */
   likechange: void;
+  /** A play was counted (or history pulled / cleared). */
+  historychange: void;
+  /** The sleep timer was set, ticked or ended. */
+  sleepchange: void;
 }>();
