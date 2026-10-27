@@ -17,6 +17,8 @@ import { initSearch } from "./ui/search";
 import { initSettings } from "./ui/settings";
 import { initTheme } from "./ui/theme";
 import { initViews } from "./ui/views";
+import { initDetail } from "./ui/detail";
+import { initQueue } from "./ui/queue";
 
 // Order matters for the document-level click handlers: play buttons first,
 // then add-to-playlist, then the plain card click (see ui/popover.ts).
@@ -29,6 +31,8 @@ initMediaControls();
 initLyrics();
 initPopover();
 initViews();
+initDetail();
+initQueue();
 initSettings();
 initAccount();
 initSync();

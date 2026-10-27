@@ -301,7 +301,82 @@ export function setQueue(ids: string[], startId: string, source: QueueSource = "
   queueSource = source;
   currentQueue = shuffleOn ? [startId, ...shuffled(list.filter((id) => id !== startId))] : list;
   currentQueueIndex = Math.max(0, currentQueue.indexOf(startId));
+  manualCount = 0;
   bus.emit("queuechange", { source, remaining: currentQueue.length - 1 - currentQueueIndex });
+  queueUpdated();
+}
+
+// --- Up next: Play next / Add to queue / reorder ----------------------------------
+// Songs you queue by hand go right after the current one, in the order you
+// added them, ahead of the rest of the list (like Spotify's "Next in queue").
+
+let manualCount = 0;
+
+function queueUpdated(): void {
+  bus.emit("queueupdate", undefined);
+}
+
+export function getUpcoming(): string[] {
+  return currentQueue.slice(currentQueueIndex + 1);
+}
+
+function insertAt(id: string, offset: number): void {
+  // Moving a song that's already coming up: take it out first.
+  const existing = currentQueue.indexOf(id, currentQueueIndex + 1);
+  if (existing !== -1) {
+    currentQueue.splice(existing, 1);
+    if (existing - currentQueueIndex - 1 < manualCount) manualCount--;
+  }
+  currentQueue.splice(currentQueueIndex + 1 + Math.min(offset, manualCount), 0, id);
+  if (!originalQueue.includes(id)) originalQueue.push(id);
+  manualCount++;
+  queueUpdated();
+}
+
+/** Play right after the current song. With nothing playing, play it now. */
+export function playNextInsert(item: Item): void {
+  trackRegistry.set(item.id, item);
+  if (!currentTrackId) {
+    setQueue([item.id], item.id);
+    void playTrack(item.id);
+    return;
+  }
+  if (item.id === currentTrackId) return;
+  insertAt(item.id, 0);
+}
+
+/** Add after the songs you've already queued. */
+export function addToQueueEnd(item: Item): void {
+  trackRegistry.set(item.id, item);
+  if (!currentTrackId) {
+    playNextInsert(item);
+    return;
+  }
+  if (item.id === currentTrackId) return;
+  insertAt(item.id, manualCount);
+}
+
+/** Reorder upcoming songs (indexes into getUpcoming()). */
+export function moveUpcoming(from: number, to: number): void {
+  const base = currentQueueIndex + 1;
+  const [id] = currentQueue.splice(base + from, 1);
+  if (!id) return;
+  currentQueue.splice(base + Math.max(0, Math.min(to, currentQueue.length - base)), 0, id);
+  queueUpdated();
+}
+
+export function removeUpcoming(index: number): void {
+  const [id] = currentQueue.splice(currentQueueIndex + 1 + index, 1);
+  if (!id) return;
+  if (index < manualCount) manualCount--;
+  originalQueue = originalQueue.filter((x) => x !== id || x === currentTrackId);
+  queueUpdated();
+}
+
+/** Jump to an upcoming song (skipping the ones before it). */
+export async function playUpcoming(index: number): Promise<void> {
+  manualCount = Math.max(0, manualCount - index - 1);
+  await playQueueIndex(currentQueueIndex + 1 + index);
 }
 
 /** Add songs to the end of the queue (radio keeps it topped up). */
@@ -309,6 +384,7 @@ export function appendToQueue(ids: string[]): void {
   const fresh = ids.filter((id) => !originalQueue.includes(id));
   originalQueue.push(...fresh);
   currentQueue.push(...(shuffleOn ? shuffled(fresh) : fresh));
+  queueUpdated();
 }
 
 export function getQueueInfo(): { source: QueueSource; remaining: number; lastId: string | null } {
@@ -332,10 +408,20 @@ export function toggleShuffle(): void {
   storage.set("groov:shuffle", shuffleOn);
   const current = currentQueue[currentQueueIndex];
   if (current) {
-    currentQueue = shuffleOn
-      ? [current, ...shuffled(originalQueue.filter((id) => id !== current))]
-      : [...originalQueue];
-    currentQueueIndex = Math.max(0, currentQueue.indexOf(current));
+    // Songs queued by hand stay next, in their order, either way.
+    const manual = currentQueue.slice(currentQueueIndex + 1, currentQueueIndex + 1 + manualCount);
+    if (shuffleOn) {
+      const others = originalQueue.filter((id) => id !== current && !manual.includes(id));
+      currentQueue = [current, ...manual, ...shuffled(others)];
+      currentQueueIndex = 0;
+    } else {
+      const pos = originalQueue.indexOf(current);
+      const before = originalQueue.slice(0, Math.max(0, pos)).filter((id) => !manual.includes(id));
+      const after = originalQueue.slice(pos + 1).filter((id) => !manual.includes(id));
+      currentQueue = [...before, current, ...manual, ...after];
+      currentQueueIndex = before.length;
+    }
+    queueUpdated();
   }
   bus.emit("modechange", undefined);
 }
@@ -363,7 +449,11 @@ const hasNext = () =>
 async function playQueueIndex(index: number): Promise<void> {
   const id = currentQueue[index];
   if (!id) return;
+  // Moving forward one song uses up one hand-queued song.
+  if (index === currentQueueIndex + 1 && manualCount > 0) manualCount--;
+  else if (index <= currentQueueIndex) manualCount = 0;
   currentQueueIndex = index;
+  queueUpdated();
   await playTrack(id);
 }
 

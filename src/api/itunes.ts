@@ -33,6 +33,9 @@ interface ITunesRaw {
   primaryGenreName?: string;
   releaseDate?: string;
   trackTimeMillis?: number;
+  trackNumber?: number;
+  discNumber?: number;
+  trackCount?: number;
 }
 
 export function normalizeResult(raw: ITunesRaw, category: Category): Item {
@@ -162,6 +165,90 @@ export async function searchCatalog(
     artists: value(artists),
   };
   return { matches, best: pickTopResult(query, allSongs, value(albums), value(artists)) };
+}
+
+async function lookup(params: Record<string, string>): Promise<ITunesRaw[]> {
+  const response = await fetch(`https://itunes.apple.com/lookup?${new URLSearchParams(params)}`);
+  if (!response.ok) throw new Error(`iTunes lookup error: ${response.status}`);
+  return ((await response.json()) as { results: ITunesRaw[] }).results;
+}
+
+export interface ArtistPage {
+  artist: Item;
+  topSongs: Item[];
+  albums: Item[];
+}
+
+/**
+ * An artist's most popular songs and their albums. Popularity comes from
+ * the search ranking (filtered to this artist); albums are newest first.
+ */
+export async function fetchArtistPage(artistId: number, name?: string): Promise<ArtistPage> {
+  const [info, albumsRaw] = await Promise.all([
+    lookup({ id: String(artistId) }),
+    lookup({ id: String(artistId), entity: "album", limit: "60" }).catch(() => [] as ITunesRaw[]),
+  ]);
+  const artistRaw = info.find((r) => r.wrapperType === "artist");
+  const artistName = artistRaw?.artistName ?? name ?? "Artist";
+  const artist = normalizeResult(artistRaw ?? { artistId, artistName }, "artists");
+
+  let topSongs = (await fetchCategory(artistName, "tracks", 50).catch(() => [] as Item[])).filter(
+    (s) => s.artistId === artistId,
+  );
+  if (topSongs.length < 5) {
+    const more = (await lookup({ id: String(artistId), entity: "song", limit: "30" }).catch(() => []))
+      .filter((r) => r.wrapperType === "track")
+      .map((r) => normalizeResult(r, "tracks"));
+    const seen = new Set(topSongs.map((s) => s.id));
+    topSongs = [...topSongs, ...more.filter((s) => !seen.has(s.id))];
+  }
+
+  const albums = albumsRaw
+    .filter((r) => r.wrapperType === "collection" && (r.trackCount ?? 2) > 1)
+    .sort((a, b) => (b.releaseDate ?? "").localeCompare(a.releaseDate ?? ""))
+    .map((r) => normalizeResult(r, "albums"));
+  // De-duplicate clean/explicit and deluxe twins: keep the plainest name
+  // ("Night Visions" over "Night Visions (Deluxe)"), in newest-first order.
+  const byName = new Map<string, Item>();
+  for (const a of albums) {
+    const key = a.name.toLowerCase().replace(/\s*[([].*?[)\]]/g, "").trim();
+    const kept = byName.get(key);
+    if (!kept || a.name.length < kept.name.length) byName.set(key, a);
+  }
+  const keep = new Set(byName.values());
+  const uniqueAlbums = albums.filter((a) => keep.has(a));
+
+  if (!artist.artwork) artist.artwork = topSongs[0]?.artwork ?? uniqueAlbums[0]?.artwork ?? null;
+  return { artist, topSongs: topSongs.slice(0, 10), albums: uniqueAlbums };
+}
+
+export interface AlbumPage {
+  album: Item;
+  tracks: Item[];
+  year: number | null;
+}
+
+/** An album's songs in track order. */
+export async function fetchAlbumPage(collectionId: number): Promise<AlbumPage> {
+  const results = await lookup({ id: String(collectionId), entity: "song", limit: "200" });
+  const albumRaw = results.find((r) => r.wrapperType === "collection");
+  if (!albumRaw) throw new Error("Album not found");
+  const tracks = results
+    .filter((r) => r.wrapperType === "track")
+    .sort((a, b) => (a.discNumber ?? 1) - (b.discNumber ?? 1) || (a.trackNumber ?? 0) - (b.trackNumber ?? 0))
+    .map((r) => normalizeResult(r, "tracks"));
+  return {
+    album: normalizeResult(albumRaw, "albums"),
+    tracks,
+    year: albumRaw.releaseDate ? new Date(albumRaw.releaseDate).getFullYear() : null,
+  };
+}
+
+/** Find an artist by name (for songs that came without an artist id). */
+export async function findArtistId(name: string): Promise<number | null> {
+  const artists = await fetchCategory(name, "artists", 5).catch(() => [] as Item[]);
+  const exact = artists.find((a) => a.name.toLowerCase() === name.toLowerCase());
+  return (exact ?? artists[0])?.artistId ?? null;
 }
 
 export async function fetchArtistTracks(artistId: number, limit: number): Promise<Item[]> {

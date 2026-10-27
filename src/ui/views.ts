@@ -5,6 +5,9 @@ import { getAccount } from "../cloud/session";
 import { sharePlaylist } from "../cloud/sync";
 import { playPlaylist } from "../player/radio";
 import { isShuffleOn, toggleShuffle } from "../player/player";
+import { findArtistId } from "../api/itunes";
+import { renderDetail } from "./detail";
+import { isLikedPlaylist } from "../library/liked";
 
 function renderShuffleToggle(): void {
   const btn = $("shuffle-playlist-btn");
@@ -34,17 +37,57 @@ const playlistEmptyEl = $("playlist-empty");
 const playlistMetaEl = $("playlist-meta");
 const shareBtn = $("share-playlist-btn");
 const deleteBtn = $("delete-playlist-btn");
+const detailViewEl = $("detail-view");
 
-/** "search" or a playlist id. */
+/** "search", a playlist id, "artist:<id>:<name>" or "album:<id>". */
 let currentView = "search";
 let viewStepCount = 0;
+
+const isDetail = (view: string) => view.startsWith("artist:") || view.startsWith("album:");
 
 /** Back from here returns to the view we're leaving. */
 function recordViewChange(): void {
   const previous = currentView;
-  pushStep(`view-${++viewStepCount}`, () =>
-    previous === "search" ? navigateToSearch(false) : navigateToPlaylist(previous, false),
-  );
+  pushStep(`view-${++viewStepCount}`, () => navigateTo(previous, false));
+}
+
+export function navigateTo(view: string, record = true): void {
+  if (view === "search") navigateToSearch(record);
+  else if (isDetail(view)) navigateToDetail(view, record);
+  else navigateToPlaylist(view, record);
+}
+
+function hideMainSections(): void {
+  recentView.style.display = "none";
+  resultsView.style.display = "none";
+  loadingView.style.display = "none";
+  playlistViewEl.style.display = "none";
+  detailViewEl.style.display = "none";
+}
+
+function navigateToDetail(view: string, record = true): void {
+  if (record && currentView !== view) recordViewChange();
+  currentView = view;
+  hideMainSections();
+  detailViewEl.style.display = "block";
+  navSearchBtn.classList.remove("active");
+  renderPlaylistNav();
+  renderDetail(view);
+  window.scrollTo({ top: 0 });
+}
+
+/** Open an artist's page (looks the artist up by name if needed). */
+export async function openArtist(artistId: number | null | undefined, name: string): Promise<void> {
+  const id = artistId || (await findArtistId(name));
+  if (!id) {
+    bus.emit("toast", `Couldn't find ${name}`);
+    return;
+  }
+  navigateTo(`artist:${id}:${encodeURIComponent(name)}`);
+}
+
+export function openAlbum(collectionId: number): void {
+  navigateTo(`album:${collectionId}`);
 }
 
 export type SearchSubview = "recent" | "results" | "loading";
@@ -58,6 +101,7 @@ export function showView(view: SearchSubview): void {
     renderPlaylistNav();
   }
   playlistViewEl.style.display = "none";
+  detailViewEl.style.display = "none";
   recentView.style.display = view === "recent" ? "block" : "none";
   resultsView.style.display = view === "results" ? "block" : "none";
   loadingView.style.display = view === "loading" ? "block" : "none";
@@ -74,11 +118,16 @@ export function renderPlaylistNav(): void {
     return;
   }
 
+  // Liked Songs first, then the rest in their usual order.
+  ids.sort((a, b) => Number(isLikedPlaylist(playlists[b])) - Number(isLikedPlaylist(playlists[a])));
   for (const id of ids) {
+    const liked = isLikedPlaylist(playlists[id]);
     const btn = document.createElement("button");
-    btn.className = `playlist-nav-item${currentView === id ? " active" : ""}`;
+    btn.className = `playlist-nav-item${currentView === id ? " active" : ""}${liked ? " liked" : ""}`;
     btn.dataset.id = id;
-    btn.textContent = (playlists[id].shared ? "👥 " : "") + playlists[id].name;
+    btn.textContent = liked
+      ? `❤️ ${playlists[id].name} · ${playlists[id].tracks.length}`
+      : (playlists[id].shared ? "👥 " : "") + playlists[id].name;
     btn.addEventListener("click", () => {
       navigateToPlaylist(id);
       closeSidebar();
@@ -93,7 +142,7 @@ function renderPlaylistView(id: string): void {
     navigateToSearch();
     return;
   }
-  playlistViewTitle.textContent = playlist.name;
+  playlistViewTitle.textContent = isLikedPlaylist(playlist) ? `❤️ ${playlist.name}` : playlist.name;
   renderPlaylistMeta(playlist);
   playlistEmptyEl.style.display = playlist.tracks.length ? "none" : "block";
   const me = getAccount()?.id;
@@ -121,7 +170,9 @@ function renderPlaylistMeta(playlist: Playlist): void {
   }
   playlistMetaEl.textContent = meta;
   playlistMetaEl.style.display = meta ? "block" : "none";
-  shareBtn.style.display = owner && getAccount() ? "inline-flex" : "none";
+  const liked = isLikedPlaylist(playlist);
+  shareBtn.style.display = owner && getAccount() && !liked ? "inline-flex" : "none";
+  deleteBtn.style.display = liked ? "none" : "inline-flex";
   const hasSongs = playlist.tracks.length > 0;
   $("play-playlist-btn").style.display = hasSongs ? "inline-flex" : "none";
   $("shuffle-playlist-btn").style.display = playlist.tracks.length > 1 ? "inline-flex" : "none";
@@ -131,9 +182,7 @@ function renderPlaylistMeta(playlist: Playlist): void {
 export function navigateToPlaylist(id: string, record = true): void {
   if (record && currentView !== id) recordViewChange();
   currentView = id;
-  recentView.style.display = "none";
-  resultsView.style.display = "none";
-  loadingView.style.display = "none";
+  hideMainSections();
   playlistViewEl.style.display = "block";
   navSearchBtn.classList.remove("active");
   renderPlaylistNav();
@@ -144,12 +193,22 @@ export function navigateToSearch(record = true): void {
   if (record && currentView !== "search") recordViewChange();
   currentView = "search";
   playlistViewEl.style.display = "none";
+  detailViewEl.style.display = "none";
   navSearchBtn.classList.add("active");
   renderPlaylistNav();
   showView(searchInput.value.trim() ? "results" : "recent");
 }
 
 export function initViews(): void {
+  // Album and artist cards (and artist links) open their page in the app.
+  document.addEventListener("click", (e) => {
+    const link = (e.target as Element).closest<HTMLElement>("[data-album], [data-artist]");
+    if (!link || (e.target as Element).closest(".play-overlay, .add-overlay")) return;
+    e.preventDefault();
+    if (link.dataset.album) openAlbum(Number(link.dataset.album));
+    else void openArtist(Number(link.dataset.artist), link.dataset.artistName ?? "");
+  });
+
   playlistTrackListEl.addEventListener("click", (e) => {
     const removeBtn = (e.target as Element).closest<HTMLElement>(".playlist-row-remove");
     if (!removeBtn) return;
@@ -206,15 +265,12 @@ export function initViews(): void {
     navigateToSearch(false);
   });
 
-  bus.on("authchange", () => {
+  const refresh = () => {
     renderPlaylistNav();
-    if (currentView !== "search") renderPlaylistView(currentView);
-  });
-
-  bus.on("playlistschange", () => {
-    renderPlaylistNav();
-    if (currentView !== "search") renderPlaylistView(currentView);
-  });
+    if (currentView !== "search" && !isDetail(currentView)) renderPlaylistView(currentView);
+  };
+  bus.on("authchange", refresh);
+  bus.on("playlistschange", refresh);
 
   renderPlaylistNav();
 }

@@ -29,6 +29,8 @@ import { updateBackgroundArt } from "./layout";
 import { openAddToPlaylist } from "./popover";
 import { createSeekBar, type SeekBar } from "./seekbar";
 import { pushStep, removeStep } from "./back";
+import { openArtist } from "./views";
+import { isLiked, toggleLike } from "../library/liked";
 
 const bar = $("player-bar");
 const barArt = $<HTMLImageElement>("player-art");
@@ -223,6 +225,26 @@ export function initNowPlaying(): void {
   $("np-close").addEventListener("click", () => close());
   npVideoBtn.addEventListener("click", () => void setVideoMode(!videoMode));
   $("np-lyrics").addEventListener("click", () => openLyrics());
+  const likeBtn = $("np-like");
+  const renderLike = () => {
+    const liked = currentItem ? isLiked(currentItem.id) : false;
+    likeBtn.textContent = liked ? "❤️" : "♡";
+    likeBtn.classList.toggle("liked", liked);
+    likeBtn.setAttribute("aria-label", liked ? "Unlike" : "Like");
+  };
+  likeBtn.addEventListener("click", () => {
+    if (currentItem) toggleLike(currentItem);
+  });
+  bus.on("trackchange", () => setTimeout(renderLike, 0));
+  bus.on("likechange", renderLike);
+  bus.on("playlistschange", renderLike);
+  // Tap the artist name to open their page.
+  npArtist.classList.add("link");
+  npArtist.addEventListener("click", () => {
+    if (!currentItem) return;
+    close();
+    void openArtist(currentItem.artistId, currentItem.subtitle);
+  });
   $("np-shuffle").addEventListener("click", () => {
     toggleShuffle();
     bus.emit("toast", isShuffleOn() ? "🔀 Shuffle on" : "Shuffle off");

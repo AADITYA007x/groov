@@ -115,6 +115,22 @@
               </div>
             </section>
 
+            <section id="detail-view" style="display: none">
+              <div class="detail-header">
+                <img id="detail-art" class="detail-art" src="" alt="" />
+                <div class="detail-info">
+                  <div id="detail-kind" class="detail-kind">Artist</div>
+                  <h1 id="detail-title" class="detail-title"></h1>
+                  <div id="detail-sub" class="detail-sub"></div>
+                  <div class="detail-actions">
+                    <button id="detail-play" class="detail-play">▶ Play</button>
+                    <button id="detail-radio" class="text-btn">📻 Radio</button>
+                  </div>
+                </div>
+              </div>
+              <div id="detail-body"></div>
+            </section>
+
             <section id="playlist-view" style="display: none">
               <div class="section-header">
                 <h2 id="playlist-view-title" class="section-title"></h2>
@@ -180,9 +196,12 @@
         <div id="np-art-slot" class="np-art-slot">
           <img id="np-art" class="np-art" src="" alt="" />
         </div>
-        <div class="np-meta">
-          <div id="np-title" class="np-title"></div>
-          <div id="np-artist" class="np-artist"></div>
+        <div class="np-meta-row">
+          <div class="np-meta">
+            <div id="np-title" class="np-title"></div>
+            <div id="np-artist" class="np-artist"></div>
+          </div>
+          <button id="np-like" class="np-like" aria-label="Like">♡</button>
         </div>
         <div class="np-progress">
           <div id="np-seek" class="seekbar seekbar-lg" role="slider" aria-label="Seek" tabindex="0">
@@ -202,6 +221,7 @@
           <button id="np-lyrics" class="np-pill">Lyrics</button>
           <button id="np-add" class="np-pill">+ Playlist</button>
           <button id="np-radio" class="np-pill">📻 Radio</button>
+          <button id="np-queue" class="np-pill">☰ Up next</button>
         </div>
       </div>
     </div>
@@ -209,6 +229,17 @@
     <!-- The one YouTube player. Invisible unless "Show video" is on; CSS
          positions it, the DOM never moves (that would restart the song). -->
     <div id="yt-host" class="yt-host"><div id="youtube-player"></div></div>
+
+    <div id="queue-sheet" class="queue-sheet" style="display: none">
+      <div class="queue-panel">
+        <div class="queue-header">
+          <h2>Up next</h2>
+          <button id="queue-close" class="video-collapse-btn queue-close" aria-label="Close">⌄</button>
+        </div>
+        <div id="queue-now" class="queue-now"></div>
+        <div id="queue-list" class="queue-list"></div>
+      </div>
+    </div>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 

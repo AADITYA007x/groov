@@ -47,4 +47,8 @@ export const bus = createEmitter<{
   queuechange: { source: QueueSource; remaining: number };
   /** Shuffle or repeat changed. */
   modechange: void;
+  /** The upcoming songs changed (queued, reordered, removed, advanced). */
+  queueupdate: void;
+  /** A song was liked or unliked. */
+  likechange: void;
 }>();

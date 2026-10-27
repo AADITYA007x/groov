@@ -4,7 +4,7 @@ import { getCachedVideoId } from "../api/youtube";
 import { isTrackPlaying } from "../player/player";
 import { registerTrack } from "../state";
 import type { Category, Item } from "../types";
-import { escapeHtml } from "../utils";
+import { escapeHtml, formatTime } from "../utils";
 
 /**
  * Card links stay for long-press / open-in-new-tab. A cached YouTube match is
@@ -39,12 +39,22 @@ function trackButtonsMarkup(item: Item, category: Category): string {
   let html = "";
   // Every song is playable: full songs on Android, YouTube or the preview elsewhere.
   html += playButton("play-overlay", item.id);
-  html += `<button class="add-overlay" data-id="${escapeHtml(item.id)}" aria-label="Add to playlist">+</button>`;
+  html += `<button class="add-overlay" data-id="${escapeHtml(item.id)}" aria-label="More: queue, like, playlists">⋯</button>`;
   return html;
 }
 
+/** Tracks play; albums and artists open their page in the app. */
+function linkAttrs(item: Item, category: Category): string {
+  if (category === "tracks") return ` data-id="${escapeHtml(item.id)}"`;
+  if (category === "albums" && item.collectionId) return ` data-album="${item.collectionId}"`;
+  if (category === "artists" && item.artistId) {
+    return ` data-artist="${item.artistId}" data-artist-name="${escapeHtml(item.name)}"`;
+  }
+  return "";
+}
+
 export function cardMarkup(item: Item, category: Category): string {
-  const idAttr = category === "tracks" ? ` data-id="${escapeHtml(item.id)}"` : "";
+  const idAttr = linkAttrs(item, category);
   return `
     <a class="card" href="${escapeHtml(trackLinkUrl(item, category))}" target="_blank" rel="noopener noreferrer"${idAttr}>
       <div class="card-art-wrap">
@@ -58,7 +68,7 @@ export function cardMarkup(item: Item, category: Category): string {
 }
 
 export function topResultMarkup(item: Item, category: Category): string {
-  const idAttr = category === "tracks" ? ` data-id="${escapeHtml(item.id)}"` : "";
+  const idAttr = linkAttrs(item, category);
   return `
     <h2 class="section-title">Top result</h2>
     <a class="top-result-card" href="${escapeHtml(trackLinkUrl(item, category))}" target="_blank" rel="noopener noreferrer"${idAttr}>
@@ -69,6 +79,30 @@ export function topResultMarkup(item: Item, category: Category): string {
       <div class="top-result-name">${escapeHtml(item.name)}</div>
       <div class="top-result-subtitle">${escapeHtml(item.topSubtitle)}</div>
     </a>
+  `;
+}
+
+/** A numbered song row for artist and album pages (play button + song menu). */
+export function trackRowMarkup(item: Item, index: number, showArt = true): string {
+  registerTrack(item);
+  const art = showArt
+    ? item.artwork
+      ? `<img class="playlist-row-art" src="${escapeHtml(item.artwork)}" alt="" loading="lazy" />`
+      : `<div class="playlist-row-art art-fallback">🎵</div>`
+    : `<div class="track-number">${index + 1}</div>`;
+  const length = item.durationMs ? formatTime(item.durationMs / 1000) : "";
+  return `
+    <div class="playlist-row">
+      <div class="playlist-row-art-wrap">
+        ${art}
+        ${playButton("playlist-row-play", item.id)}
+      </div>
+      <div class="playlist-row-info">
+        <div class="playlist-row-name">${escapeHtml(item.name)}</div>
+        <div class="playlist-row-subtitle">${escapeHtml(item.subtitle)}${length ? ` · ${length}` : ""}</div>
+      </div>
+      <button class="add-overlay row-add" data-id="${escapeHtml(item.id)}" aria-label="More">⋯</button>
+    </div>
   `;
 }
 

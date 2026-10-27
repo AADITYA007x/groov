@@ -1,9 +1,12 @@
 // "Add to playlist" popover opened from a card's + button.
 import { addTrackToPlaylist, createPlaylist, getPlaylists, removeTrackFromPlaylist } from "../library/playlists";
-import { queueFromElement, playTrack } from "../player/player";
-import { trackRegistry } from "../state";
+import { addToQueueEnd, playNextInsert, queueFromElement, playTrack } from "../player/player";
+import { startRadio } from "../player/radio";
+import { isLiked, isLikedPlaylist, toggleLike } from "../library/liked";
+import { bus, trackRegistry } from "../state";
 import { $, escapeHtml } from "../utils";
 import { pushStep, removeStep } from "./back";
+import { markManual } from "./queue";
 
 const popover = $("add-to-playlist-popover");
 
@@ -17,9 +20,19 @@ export function openAddToPlaylist(trackId: string, anchorEl: HTMLElement): void 
   const item = trackRegistry.get(trackId);
   if (!item) return;
   const playlists = getPlaylists();
-  const ids = Object.keys(playlists);
+  // Liked Songs has its own ❤️ action; other playlists listed below it.
+  const ids = Object.keys(playlists).filter((id) => !isLikedPlaylist(playlists[id]));
+  const liked = isLiked(trackId);
 
-  let html = ids.length
+  let html = `
+    <button class="popover-action" data-action="next">▶ Play next</button>
+    <button class="popover-action" data-action="queue">➕ Add to queue</button>
+    <button class="popover-action" data-action="like">${liked ? "💔 Remove from Liked Songs" : "❤️ Like"}</button>
+    <button class="popover-action" data-action="radio">📻 Start radio</button>
+    <div class="popover-divider"></div>
+    <div class="popover-label">Add to playlist</div>
+  `;
+  html += ids.length
     ? ids
         .map((id) => {
           const checked = playlists[id].tracks.some((t) => t.id === trackId);
@@ -42,6 +55,23 @@ export function openAddToPlaylist(trackId: string, anchorEl: HTMLElement): void 
   const width = popover.offsetWidth || 220;
   popover.style.top = `${Math.min(rect.bottom + 6, window.innerHeight - 200)}px`;
   popover.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - width - 16))}px`;
+
+  popover.querySelectorAll<HTMLElement>(".popover-action").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const action = btn.dataset.action;
+      if (action === "next") {
+        playNextInsert(item);
+        markManual(item.id);
+        bus.emit("toast", `▶ "${item.name}" plays next`);
+      } else if (action === "queue") {
+        addToQueueEnd(item);
+        markManual(item.id);
+        bus.emit("toast", `➕ Added "${item.name}" to the queue`);
+      } else if (action === "like") toggleLike(item);
+      else if (action === "radio") void startRadio(item);
+      close();
+    });
+  });
 
   popover.querySelectorAll<HTMLElement>(".popover-item").forEach((btn) => {
     btn.addEventListener("click", () => {
