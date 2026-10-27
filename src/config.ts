@@ -15,13 +15,19 @@ export const KEYS = {
   ytCache: "search-demo:yt-cache",
   playlists: "search-demo:playlists",
   ytKey: "groov:youtube-api-key",
+  /** The key saved to the Groov account (shared by everyone signed in). */
+  accountYtKey: "groov:account-youtube-key",
 } as const;
 
 const BUILD_YOUTUBE_KEY = (import.meta.env.VITE_YOUTUBE_API_KEY as string | undefined) ?? "";
 
-/** A key pasted in the app wins over one baked in at build time. */
+/** Key pasted on this device, else the account's shared key, else the built-in one. */
 export function getYoutubeApiKey(): string {
-  return storage.get<string>(KEYS.ytKey, "") || BUILD_YOUTUBE_KEY;
+  return storage.get<string>(KEYS.ytKey, "") || storage.get<string>(KEYS.accountYtKey, "") || BUILD_YOUTUBE_KEY;
+}
+
+export function hasAccountYoutubeKey(): boolean {
+  return Boolean(storage.get<string>(KEYS.accountYtKey, ""));
 }
 
 export function setYoutubeApiKey(key: string): void {

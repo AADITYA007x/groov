@@ -1,6 +1,7 @@
 // Sidebar settings: paste a YouTube key at runtime (no rebuild needed),
 // allow background play on Android, and show which version is installed.
-import { getYoutubeApiKey, hasCustomYoutubeKey, setYoutubeApiKey } from "../config";
+import { getYoutubeApiKey, hasAccountYoutubeKey, hasCustomYoutubeKey, setYoutubeApiKey } from "../config";
+import { shareYoutubeKey } from "../cloud/shared";
 import { isBackgroundPlayAllowed, isNativeApp, openBackgroundPlaySettings } from "../player/media-controls";
 import { $ } from "../utils";
 import { hasNativeAudio, nativeAudio } from "../player/native-audio";
@@ -85,7 +86,7 @@ function renderKeyStatus(): void {
     keyBtn.textContent = key ? "Backup YouTube key: set ✓" : "Backup YouTube key: none (optional)";
     return;
   }
-  const source = hasCustomYoutubeKey() ? "your key" : "built-in key";
+  const source = hasCustomYoutubeKey() ? "your key" : hasAccountYoutubeKey() ? "from your account" : "built-in key";
   keyBtn.textContent = key ? `YouTube: full songs (${source})` : "YouTube: add key for full songs";
 }
 
@@ -109,7 +110,13 @@ export function initSettings(): void {
     if (value === null) return;
     setYoutubeApiKey(value);
     renderKeyStatus();
+    if (value.trim()) {
+      void shareYoutubeKey(value.trim()).then((shared) => {
+        if (shared) bus.emit("toast", "🔑 Key saved to your account: your other devices and friends get it too");
+      });
+    }
   });
+  bus.on("youtubekeychange", renderKeyStatus);
 
   if (hasNativeAudio) {
     crossfadeBtn.style.display = "block";

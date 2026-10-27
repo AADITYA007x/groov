@@ -57,4 +57,6 @@ export const bus = createEmitter<{
   sleepchange: void;
   /** Made for you mixes changed (new day, songs fetched). */
   mixchange: void;
+  /** The YouTube key arrived from (or was saved to) the account. */
+  youtubekeychange: void;
 }>();

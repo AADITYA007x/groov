@@ -23,6 +23,7 @@ import { initHistory } from "./library/history";
 import { initSleep } from "./ui/sleep";
 import { initStats } from "./ui/stats";
 import { initHome } from "./ui/home";
+import { initShared } from "./cloud/shared";
 
 // Order matters for the document-level click handlers: play buttons first,
 // then add-to-playlist, then the plain card click (see ui/popover.ts).
@@ -41,6 +42,7 @@ initSleep();
 initStats();
 initHome();
 initHistory();
+initShared();
 initSettings();
 initAccount();
 initSync();

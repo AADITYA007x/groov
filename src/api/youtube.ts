@@ -2,6 +2,7 @@
 import { KEYS, getYoutubeApiKey } from "../config";
 import type { Item } from "../types";
 import { storage } from "../utils";
+import { lookupSharedVideoId, shareVideoId } from "../cloud/shared";
 
 /** item id -> YouTube video id (null = searched, nothing found). */
 const idCache: Record<string, string | null> = storage.get(KEYS.ytCache, {});
@@ -34,6 +35,7 @@ export async function findYoutubeVideoId(item: Item): Promise<string | null> {
     const videoId = data.items?.[0]?.id?.videoId || null;
     idCache[item.id] = videoId;
     storage.set(KEYS.ytCache, idCache);
+    if (videoId) shareVideoId(item.id, videoId);
     return videoId;
   })();
 
@@ -58,4 +60,27 @@ export function loadYoutubeIframeApi(): Promise<typeof YT> {
     document.head.appendChild(script);
   });
   return apiReady;
+}
+
+/**
+ * Which video to play for a song, cheapest way first: songs from YouTube
+ * know it; then this device's cache; then a match another Groov device
+ * already found (free, no key); then a YouTube search (needs a key).
+ */
+export async function resolveVideoId(item: Item): Promise<string | null> {
+  if (item.id.startsWith("yt-")) return item.id.slice(3);
+  const cached = getCachedVideoId(item.id);
+  if (cached) return cached;
+  const shared = await lookupSharedVideoId(item.id);
+  if (shared) {
+    idCache[item.id] = shared;
+    storage.set(KEYS.ytCache, idCache);
+    return shared;
+  }
+  if (cached === null || !getYoutubeApiKey()) return null;
+  try {
+    return await findYoutubeVideoId(item);
+  } catch {
+    return null; // network/quota error: the caller falls back to the preview
+  }
 }

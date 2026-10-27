@@ -13,8 +13,8 @@
 // shows album art); the Now Playing screen can lay it over its artwork
 // slot to show the video. Only CSS moves it, never the DOM, because
 // re-parenting a live iframe reloads it and restarts the song.
-import { getYoutubeApiKey } from "../config";
-import { findYoutubeVideoId, loadYoutubeIframeApi } from "../api/youtube";
+import { loadYoutubeIframeApi, resolveVideoId } from "../api/youtube";
+import { shareVideoId } from "../cloud/shared";
 import { bus, trackRegistry } from "../state";
 import type { Item } from "../types";
 import { $, storage } from "../utils";
@@ -626,6 +626,7 @@ export async function playTrack(id: string): Promise<void> {
       const { cancelled, videoId } = await nativeAudio.play(toNativeTrack(item));
       if (cancelled || currentTrackId !== id) return;
       nativeVideoId = videoId ?? null;
+      if (videoId) shareVideoId(item.id, videoId);
       bus.emit("loading", false);
       prefetchNext();
       return;
@@ -637,15 +638,7 @@ export async function playTrack(id: string): Promise<void> {
     }
   }
 
-  // Songs from YouTube itself (radio) know their video: no key needed.
-  let youtubeId: string | null = item.id.startsWith("yt-") ? item.id.slice(3) : null;
-  if (!youtubeId && getYoutubeApiKey()) {
-    try {
-      youtubeId = await findYoutubeVideoId(item);
-    } catch {
-      youtubeId = null; // network/quota error: fall back to the preview below
-    }
-  }
+  const youtubeId = await resolveVideoId(item);
 
   if (currentTrackId !== id) return; // superseded by another click meanwhile
 
