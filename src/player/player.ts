@@ -301,12 +301,31 @@ async function playNextInQueue(): Promise<void> {
   if (hasNext()) await playQueueIndex(currentQueueIndex + 1);
 }
 
+// Listening along with someone: their queue decides what's next, so
+// skips are sent to them instead (see cloud/jam.ts).
+type SkipInterceptor = (direction: "next" | "previous") => boolean;
+let skipInterceptor: SkipInterceptor | null = null;
+
+export function setSkipInterceptor(fn: SkipInterceptor | null): void {
+  skipInterceptor = fn;
+}
+
 export async function playNext(): Promise<void> {
+  if (skipInterceptor?.("next")) return;
   await playNextInQueue();
+}
+
+/** Play a song that isn't in any list on screen (e.g. from a friend). */
+export async function playItem(item: Item): Promise<void> {
+  trackRegistry.set(item.id, item);
+  if (currentTrackId === item.id) return;
+  setQueue([item.id], item.id);
+  await playTrack(item.id);
 }
 
 /** Like every music app: restart the song if past 3s, else go back one. */
 export async function playPrevious(): Promise<void> {
+  if (skipInterceptor?.("previous")) return;
   if (getPosition() > 3 || currentQueueIndex <= 0) {
     seekTo(0);
     return;

@@ -4,6 +4,9 @@ import { initMediaControls } from "./player/media-controls";
 import { initPlayer } from "./player/player";
 import { initSession } from "./cloud/session";
 import { initSync } from "./cloud/sync";
+import { initPresence } from "./cloud/presence";
+import { initJam } from "./cloud/jam";
+import { initFriends } from "./ui/friends";
 import { initAccount } from "./ui/account";
 import { initBack } from "./ui/back";
 import { initLayout } from "./ui/layout";
@@ -28,5 +31,8 @@ initViews();
 initSettings();
 initAccount();
 initSync();
+initPresence();
+initJam();
+initFriends();
 initSession(); // last: its first auth event drives sync and the UI
 initSearch();

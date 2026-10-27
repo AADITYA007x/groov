@@ -34,6 +34,14 @@
         <button id="account-btn" class="sidebar-setting">Sign in to sync playlists</button>
         <div id="sync-status" class="sidebar-version"></div>
 
+        <div id="friends-section" style="display: none">
+          <div class="sidebar-header">
+            <span>Friends</span>
+          </div>
+          <div id="jam-listeners" class="jam-listeners" style="display: none"></div>
+          <div id="friends-list" class="friends-list"></div>
+        </div>
+
         <div class="sidebar-header">
           <span>Settings</span>
         </div>
@@ -159,6 +167,10 @@
           <div class="np-label">Now playing</div>
           <button id="np-video" class="np-icon-btn np-video-btn" aria-label="Show video" title="Show video">🎬</button>
         </header>
+        <div id="np-jam" class="np-jam" style="display: none">
+          <span id="np-jam-text"></span>
+          <button id="np-jam-leave" class="np-jam-leave">Leave</button>
+        </div>
         <div id="np-art-slot" class="np-art-slot">
           <img id="np-art" class="np-art" src="" alt="" />
         </div>
@@ -188,6 +200,8 @@
     <!-- The one YouTube player. Invisible unless "Show video" is on; CSS
          positions it, the DOM never moves (that would restart the song). -->
     <div id="yt-host" class="yt-host"><div id="youtube-player"></div></div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <div id="account-dialog" class="dialog-backdrop" style="display: none">
       <form id="account-form" class="dialog" autocomplete="on">

@@ -1,6 +1,8 @@
 import type { Item } from "./types";
 import type { Account } from "./cloud/session";
 import type { SyncStatus } from "./cloud/sync";
+import type { FriendStatus } from "./cloud/presence";
+import type { JamInfo } from "./cloud/jam";
 import type { Engine } from "./player/player";
 import { createEmitter } from "./utils";
 
@@ -35,4 +37,10 @@ export const bus = createEmitter<{
   /** A change was queued for the account. */
   outbox: void;
   syncstatus: SyncStatus;
+  /** Who's online and what they're playing. */
+  friendschange: FriendStatus[];
+  /** Listening along with someone / people listening along with me. */
+  jamchange: JamInfo;
+  /** A short message at the bottom of the screen. */
+  toast: string;
 }>();

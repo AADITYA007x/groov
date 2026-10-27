@@ -107,5 +107,5 @@ keyPassword=…
 1. ~~Proper project: Vite + TypeScript, CI-built signed APK~~
 2. ~~Spotify-style playback: background and screen-off play, lock-screen and notification controls, media keys~~
 3. ~~Full songs from YouTube audio streams with no search quota, plus offline downloads~~
-4. For the two of us: ~~login, synced and shared playlists~~, listen together
+4. ~~For the two of us: login, synced and shared playlists, listen together~~
 5. Discovery and polish: Last.fm recommendations, Deezer charts, artist pages, stats, crossfade

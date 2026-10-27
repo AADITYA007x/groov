@@ -1740,3 +1740,121 @@ body.np-open {
 .playlist-row-added-by {
   color: var(--accent-2-bright);
 }
+
+/* --- Friends + listen together ------------------------------------------------- */
+
+.friends-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.friend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+}
+
+.friend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3ddc84;
+  box-shadow: 0 0 8px #3ddc84;
+  flex-shrink: 0;
+}
+
+.friend-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.friend-name {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.friend-status {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.friend-btn {
+  flex-shrink: 0;
+  border: none;
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  cursor: pointer;
+}
+
+.friend-btn.leave {
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border);
+}
+
+.friends-empty,
+.jam-listeners {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 2px 12px 8px;
+}
+
+.jam-listeners {
+  color: var(--accent-2-bright);
+}
+
+.np-jam {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-2-bright);
+  margin-top: -6px;
+}
+
+.np-jam-leave {
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 130px;
+  z-index: 600;
+  transform: translate(-50%, 20px);
+  max-width: calc(100% - 32px);
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: rgba(20, 10, 40, 0.92);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
