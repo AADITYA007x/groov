@@ -44,7 +44,13 @@ public class NativeAudioPlugin extends Plugin {
     private final AtomicInteger playToken = new AtomicInteger();
 
     private YouTubeAudio youtube;
-    private ExoPlayer player; // main thread only
+    private ExoPlayer player; // main thread only; the song you hear (and events come from)
+    private File currentFile;
+
+    // Crossfade: the previous song fading out, and the fade in progress.
+    private ExoPlayer fadingOut;
+    private Runnable fadeTask;
+    private float targetVolume = 1f;
 
     private final Runnable progressTick = new Runnable() {
         @Override
@@ -58,7 +64,7 @@ public class NativeAudioPlugin extends Plugin {
     @Override
     public void load() {
         youtube = new YouTubeAudio(getContext());
-        main.post(this::createPlayer);
+        main.post(() -> player = createPlayer(true));
     }
 
     @Override
@@ -67,6 +73,7 @@ public class NativeAudioPlugin extends Plugin {
         prefetcher.shutdownNow();
         radioWorker.shutdownNow();
         main.post(() -> {
+            finishFade();
             if (player != null) {
                 player.release();
                 player = null;
@@ -74,19 +81,26 @@ public class NativeAudioPlugin extends Plugin {
         });
     }
 
-    private void createPlayer() {
-        player = new ExoPlayer.Builder(getContext())
-            .setAudioAttributes(
-                new AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(),
-                true // ExoPlayer handles audio focus: pauses for calls and other apps
-            )
+    private static final AudioAttributes MUSIC = new AudioAttributes.Builder()
+        .setUsage(C.USAGE_MEDIA)
+        .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+        .build();
+
+    /**
+     * handleFocus: ExoPlayer manages audio focus (pauses for calls). Off for a
+     * song fading in, or it would take focus from (and pause) the one fading out.
+     */
+    private ExoPlayer createPlayer(boolean handleFocus) {
+        final ExoPlayer p = new ExoPlayer.Builder(getContext())
+            .setAudioAttributes(MUSIC, handleFocus)
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .build();
 
-        player.addListener(new Player.Listener() {
+        p.addListener(new Player.Listener() {
             @Override
             public void onIsPlayingChanged(boolean isPlaying) {
+                if (p != player) return; // a song fading out: not what JS follows
                 JSObject data = new JSObject();
                 data.put("playing", isPlaying);
                 notifyListeners("state", data);
@@ -99,18 +113,34 @@ public class NativeAudioPlugin extends Plugin {
 
             @Override
             public void onPlaybackStateChanged(int state) {
+                if (p != player) return;
                 if (state == Player.STATE_READY) emitProgress();
                 if (state == Player.STATE_ENDED) notifyListeners("ended", new JSObject());
             }
 
             @Override
             public void onPlayerError(@NonNull PlaybackException error) {
+                if (p != player) return;
                 Log.w(TAG, "Playback error", error);
                 JSObject data = new JSObject();
                 data.put("message", error.getMessage());
                 notifyListeners("error", data);
             }
         });
+        return p;
+    }
+
+    /** End a crossfade now: drop the old song, new one at full volume. */
+    private void finishFade() {
+        if (fadeTask != null) main.removeCallbacks(fadeTask);
+        fadeTask = null;
+        if (fadingOut != null) {
+            fadingOut.release();
+            fadingOut = null;
+            // Now the new song may take audio focus (pause for calls etc).
+            if (player != null) player.setAudioAttributes(MUSIC, true);
+        }
+        if (player != null) player.setVolume(targetVolume);
     }
 
     private void emitProgress() {
@@ -144,6 +174,7 @@ public class NativeAudioPlugin extends Plugin {
         }
         int token = playToken.incrementAndGet();
         main.post(() -> {
+            finishFade();
             if (player != null) player.stop(); // silence the old song right away
         });
 
@@ -166,7 +197,9 @@ public class NativeAudioPlugin extends Plugin {
                     try {
                         float g = youtube.ensureGain(videoId);
                         main.post(() -> {
-                            if (token == playToken.get() && player != null) player.setVolume(g);
+                            if (token != playToken.get() || player == null) return;
+                            targetVolume = g;
+                            if (fadeTask == null) player.setVolume(g);
                         });
                     } catch (Exception e) {
                         Log.i(TAG, "No loudness for " + videoId + ": " + YouTubeAudio.describe(e));
@@ -178,7 +211,9 @@ public class NativeAudioPlugin extends Plugin {
                     resolveCancelled(call);
                     return;
                 }
-                player.setVolume(Float.isNaN(gain) ? 1f : gain);
+                targetVolume = Float.isNaN(gain) ? 1f : gain;
+                player.setVolume(targetVolume);
+                currentFile = file;
                 player.setMediaItem(MediaItem.fromUri(Uri.fromFile(file)));
                 player.prepare();
                 player.play();
@@ -194,6 +229,100 @@ public class NativeAudioPlugin extends Plugin {
         JSObject result = new JSObject();
         result.put("cancelled", true);
         call.resolve(result);
+    }
+
+    /**
+     * Crossfade into the next song: it starts silently and fades in while
+     * the current one fades out. Only for songs already saved on the phone
+     * (the next song is downloaded in advance); otherwise rejects "not-ready"
+     * and JS just plays it normally when the current song ends.
+     */
+    @PluginMethod
+    public void crossfade(PluginCall call) {
+        YouTubeAudio.Track track = trackFrom(call);
+        Double secondsArg = call.getDouble("seconds", 6.0);
+        long fadeMs = Math.max(500, Math.round((secondsArg == null ? 6.0 : secondsArg) * 1000));
+        if (track.key.isEmpty() || !youtube.isCached(track)) {
+            call.reject("not-ready");
+            return;
+        }
+        int token = playToken.incrementAndGet();
+        loader.execute(() -> {
+            File file;
+            try {
+                file = youtube.fetch(track); // instant: already saved
+            } catch (Exception e) {
+                call.reject(YouTubeAudio.describe(e));
+                return;
+            }
+            String videoId = youtube.knownVideoId(track.key);
+            float gain = videoId != null ? youtube.gainFor(videoId) : Float.NaN;
+            main.post(() -> {
+                if (token != playToken.get() || player == null) {
+                    resolveCancelled(call);
+                    return;
+                }
+                finishFade();
+                final ExoPlayer old = player;
+                final float oldVolume = old.getVolume();
+                final ExoPlayer next = createPlayer(false);
+                targetVolume = Float.isNaN(gain) ? 1f : gain;
+                next.setVolume(0f);
+                next.setMediaItem(MediaItem.fromUri(Uri.fromFile(file)));
+                next.prepare();
+                player = next; // JS now follows the new song
+                currentFile = file;
+                fadingOut = old;
+                next.play();
+
+                final long start = android.os.SystemClock.uptimeMillis();
+                fadeTask = new Runnable() {
+                    @Override
+                    public void run() {
+                        float t = Math.min(1f, (android.os.SystemClock.uptimeMillis() - start) / (float) fadeMs);
+                        // Equal-power curve: no dip in loudness halfway through.
+                        next.setVolume(targetVolume * (float) Math.sin(t * Math.PI / 2));
+                        old.setVolume(oldVolume * (float) Math.cos(t * Math.PI / 2));
+                        if (t < 1f) main.postDelayed(this, 40);
+                        else finishFade();
+                    }
+                };
+                main.post(fadeTask);
+
+                JSObject result = new JSObject();
+                result.put("cancelled", false);
+                result.put("videoId", videoId);
+                call.resolve(result);
+            });
+        });
+    }
+
+    @PluginMethod
+    public void storageInfo(PluginCall call) {
+        long[] stats = youtube.cacheStats();
+        JSObject result = new JSObject();
+        result.put("bytes", stats[0]);
+        result.put("songs", stats[1]);
+        result.put("limitMb", youtube.cacheLimitMb());
+        call.resolve(result);
+    }
+
+    @PluginMethod
+    public void setCacheLimit(PluginCall call) {
+        Integer mb = call.getInt("mb", 800);
+        final File keep = currentFile;
+        prefetcher.execute(() -> youtube.setCacheLimitMb(mb == null ? 800 : mb, keep));
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void clearCache(PluginCall call) {
+        final File keep = currentFile;
+        prefetcher.execute(() -> {
+            JSObject result = new JSObject();
+            result.put("deleted", youtube.clearCache(keep));
+            call.resolve(result);
+        });
     }
 
     /** Songs for endless radio after a track: [{videoId, title, artist, durationSec, artwork}]. */
@@ -253,6 +382,7 @@ public class NativeAudioPlugin extends Plugin {
     @PluginMethod
     public void pause(PluginCall call) {
         main.post(() -> {
+            finishFade();
             if (player != null) player.pause();
         });
         call.resolve();
@@ -264,6 +394,7 @@ public class NativeAudioPlugin extends Plugin {
         long ms = Math.max(0, Math.round((position == null ? 0 : position) * 1000));
         main.post(() -> {
             if (player == null) return;
+            finishFade();
             player.seekTo(ms);
             emitProgress();
         });
@@ -275,6 +406,7 @@ public class NativeAudioPlugin extends Plugin {
     public void stop(PluginCall call) {
         playToken.incrementAndGet();
         main.post(() -> {
+            finishFade();
             if (player != null) {
                 player.stop();
                 player.clearMediaItems();

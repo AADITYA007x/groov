@@ -45,7 +45,7 @@ import org.schabi.newpipe.extractor.stream.StreamInfoItem;
 final class YouTubeAudio {
 
     private static final String TAG = "GroovYouTube";
-    private static final long CACHE_LIMIT_BYTES = 800L * 1024 * 1024;
+    private static final int DEFAULT_CACHE_LIMIT_MB = 800;
     private static final int CHUNK_BYTES = 2 * 1024 * 1024;
     /** YouTube's own player sends this POST body for media requests. */
     private static final byte[] POST_BODY = new byte[] { 0x78, 0 };
@@ -171,8 +171,40 @@ final class YouTubeAudio {
     }
 
     boolean isCached(Track track) {
-        String videoId = ids.getString(track.key, null);
+        String videoId = knownVideoId(track.key);
         return videoId != null && findCached(videoId) != null;
+    }
+
+    // --- Storage settings ---------------------------------------------------------
+
+    int cacheLimitMb() {
+        return ids.getInt("cacheLimitMb", DEFAULT_CACHE_LIMIT_MB);
+    }
+
+    void setCacheLimitMb(int mb, File keep) {
+        ids.edit().putInt("cacheLimitMb", Math.max(100, mb)).apply();
+        trimCache(keep);
+    }
+
+    /** {bytes used, number of songs}. */
+    long[] cacheStats() {
+        File[] files = cacheDir.listFiles((dir, name) -> !name.endsWith(".part"));
+        long bytes = 0;
+        if (files != null) for (File f : files) bytes += f.length();
+        return new long[] { bytes, files == null ? 0 : files.length };
+    }
+
+    /** Delete every saved song except the one playing. Returns how many. */
+    int clearCache(File keep) {
+        File[] files = cacheDir.listFiles();
+        int deleted = 0;
+        if (files != null) {
+            for (File f : files) {
+                if (f.equals(keep)) continue;
+                if (f.delete()) deleted++;
+            }
+        }
+        return deleted;
     }
 
     // --- Search ------------------------------------------------------------------
@@ -355,10 +387,11 @@ final class YouTubeAudio {
         if (files == null) return;
         long total = 0;
         for (File f : files) total += f.length();
-        if (total <= CACHE_LIMIT_BYTES) return;
+        long limit = cacheLimitMb() * 1024L * 1024L;
+        if (total <= limit) return;
         Arrays.sort(files, (a, b) -> Long.compare(a.lastModified(), b.lastModified()));
         for (File f : files) {
-            if (total <= CACHE_LIMIT_BYTES) break;
+            if (total <= limit) break;
             if (f.equals(keep)) continue;
             total -= f.length();
             if (!f.delete()) Log.w(TAG, "Could not delete " + f);
