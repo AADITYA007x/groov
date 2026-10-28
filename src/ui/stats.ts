@@ -103,7 +103,7 @@ export function initStats(): void {
       return;
     }
     if (target.closest("#stats-play-top") && topIds.length) {
-      setQueue(topIds, topIds[0]);
+      setQueue(topIds, topIds[0], "list", "Your top songs");
       void playTrack(topIds[0]);
       return;
     }

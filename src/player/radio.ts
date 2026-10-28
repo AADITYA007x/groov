@@ -13,12 +13,15 @@ import {
   appendToQueue,
   getCurrentTrackId,
   getQueueInfo,
+  getRepeatMode,
+  getUpcoming,
   isShuffleOn,
   playTrack,
   setAutoplayHandler,
   setQueue,
 } from "./player";
 import { storage } from "../utils";
+import { topSongs } from "../library/history";
 
 interface RadioTrack {
   videoId: string;
@@ -127,7 +130,7 @@ export async function startRadio(seed?: Item): Promise<void> {
   items.forEach((i) => trackRegistry.set(i.id, i));
   trackRegistry.set(item.id, item);
   seedName = item.name;
-  setQueue([item.id, ...items.map((i) => i.id)], item.id, "radio");
+  setQueue([item.id, ...items.map((i) => i.id)], item.id, "radio", `Radio · ${item.name}`);
   if (getCurrentTrackId() !== item.id) await playTrack(item.id);
   bus.emit("toast", `📻 Radio based on "${item.name}"`);
 }
@@ -183,7 +186,7 @@ export async function surpriseMe(): Promise<void> {
   } else {
     const rest = pool.filter((t) => t.id !== pick.id).sort(() => Math.random() - 0.5);
     seedName = "Surprise me";
-    setQueue([pick.id, ...rest.map((t) => t.id)], pick.id, "radio");
+    setQueue([pick.id, ...rest.map((t) => t.id)], pick.id, "radio", "Surprise me");
     await playTrack(pick.id);
   }
 }
@@ -199,6 +202,8 @@ export async function shuffleLibrary(): Promise<void> {
   setQueue(
     songs.map((t) => t.id),
     songs[0].id,
+    "list",
+    "Shuffle · your library",
   );
   await playTrack(songs[0].id);
   bus.emit("toast", `🔀 Shuffling ${songs.length} songs from your playlists`);
@@ -214,13 +219,19 @@ export async function playPlaylist(playlistId: string): Promise<void> {
   setQueue(
     tracks.map((t) => t.id),
     start.id,
+    "list",
+    playlist.name,
   );
   await playTrack(start.id);
 }
 
 // --- Autoplay -----------------------------------------------------------------------
-// The last song ended (or you pressed Next on it): keep the music going with
-// radio from that song, like Spotify. Off in Settings, or with Repeat on.
+// Like YouTube Music: when your list is nearly over, radio from its last song
+// is fetched and shown in Up next under "Autoplay"; it plays after your list.
+// Filter it with All / Familiar (songs you know) / Discover (new to you).
+// Off in Settings, or with Repeat on.
+
+export type AutoplayFilter = "all" | "familiar" | "discover";
 
 export function isAutoplayOn(): boolean {
   return storage.get<boolean>("groov:autoplay", true);
@@ -228,22 +239,121 @@ export function isAutoplayOn(): boolean {
 
 export function setAutoplay(on: boolean): void {
   storage.set("groov:autoplay", on);
+  bus.emit("queueupdate", undefined);
+}
+
+let filter: AutoplayFilter = storage.get<AutoplayFilter>("groov:autoplay-filter", "all");
+let preview: { seedId: string; seed: Item; items: Item[] } | null = null;
+let previewLoading: string | null = null;
+/** Last song a preview was tried for (don't retry in a loop when offline). */
+let previewTriedFor: string | null = null;
+const removed = new Set<string>();
+
+export function getAutoplayFilter(): AutoplayFilter {
+  return filter;
+}
+
+export function setAutoplayFilter(f: AutoplayFilter): void {
+  filter = f;
+  storage.set("groov:autoplay-filter", f);
+  bus.emit("queueupdate", undefined);
+}
+
+const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+const songKey = (i: Item) => `${norm(cleanTitle(i.name, ""))}|${norm(i.subtitle.split(/,|&/)[0])}`;
+
+/** Songs you know: in your playlists or listening history. */
+function knownKeys(): Set<string> {
+  const keys = new Set<string>();
+  for (const t of librarySongs()) keys.add(songKey(t));
+  for (const s of topSongs(0, 2000)) keys.add(songKey(s.item));
+  return keys;
+}
+
+/** Songs that will autoplay after your list (already filtered). */
+export function getAutoplayPreview(): { seed: Item; items: Item[] } | null {
+  if (!preview || !autoplayApplies()) return null;
+  const { lastId } = getQueueInfo();
+  if (preview.seedId !== lastId) return null;
+  const inQueue = new Set([...getUpcoming(), getCurrentTrackId()]);
+  let items = preview.items.filter((i) => !removed.has(i.id) && !inQueue.has(i.id));
+  if (filter !== "all") {
+    const known = knownKeys();
+    items = items.filter((i) => known.has(songKey(i)) === (filter === "familiar"));
+  }
+  return { seed: preview.seed, items };
+}
+
+export function isAutoplayLoading(): boolean {
+  return previewLoading !== null;
+}
+
+export function removeFromAutoplay(id: string): void {
+  removed.add(id);
+  bus.emit("queueupdate", undefined);
+}
+
+function autoplayApplies(): boolean {
+  return isAutoplayOn() && getQueueInfo().source === "list" && getRepeatMode() === "off";
+}
+
+/** Near the end of your list: get the autoplay songs ready. */
+async function preparePreview(): Promise<void> {
+  if (!autoplayApplies()) return;
+  const { remaining, lastId } = getQueueInfo();
+  if (remaining > 3 || !lastId || preview?.seedId === lastId || previewTriedFor === lastId) return;
+  const seed = trackRegistry.get(lastId);
+  if (!seed) return;
+  previewLoading = lastId;
+  previewTriedFor = lastId;
+  bus.emit("queueupdate", undefined);
+  try {
+    const items = (await radioAfter(seed)).filter((i) => i.id !== seed.id);
+    items.forEach((i) => trackRegistry.set(i.id, i));
+    preview = { seedId: lastId, seed, items };
+    removed.clear();
+  } catch {
+    // offline: autoplay tries again when the list ends
+  } finally {
+    previewLoading = null;
+    bus.emit("queueupdate", undefined);
+  }
+}
+
+/** Play an autoplay song now: your list continues into autoplay from there. */
+export async function playFromAutoplay(id: string): Promise<void> {
+  const shown = getAutoplayPreview();
+  if (!shown) return;
+  const index = shown.items.findIndex((i) => i.id === id);
+  if (index < 0) return;
+  const label = `Radio · ${shown.seed.name}`;
+  const current = getCurrentTrackId();
+  const ids = shown.items.slice(index).map((i) => i.id);
+  setQueue(current ? [current, ...ids] : ids, current ?? ids[0], "radio", label);
+  seedName = shown.seed.name;
+  preview = null;
+  await playTrack(id);
 }
 
 let autoplaying = false;
 
+/** The list ended: carry on with the autoplay songs. */
 async function autoplay(): Promise<boolean> {
   const current = getCurrentTrackId();
   const item = current ? trackRegistry.get(current) : undefined;
   if (!isAutoplayOn() || !item || autoplaying) return false;
   autoplaying = true;
-  bus.emit("toast", `📻 Autoplay: more like "${item.name}"…`);
   try {
-    const items = (await radioAfter(item)).filter((i) => i.id !== item.id);
+    let items = getAutoplayPreview()?.items;
+    if (!items?.length) {
+      bus.emit("toast", `📻 Autoplay: more like "${item.name}"…`);
+      items = (await radioAfter(item)).filter((i) => i.id !== item.id);
+    }
     if (!items.length || getCurrentTrackId() !== item.id) return false;
     items.forEach((i) => trackRegistry.set(i.id, i));
     seedName = item.name;
-    setQueue([item.id, ...items.map((i) => i.id)], item.id, "radio");
+    setQueue([item.id, ...items.map((i) => i.id)], item.id, "radio", `Radio · ${item.name}`);
+    preview = null;
     return true;
   } catch {
     bus.emit("toast", "Nothing more to play");
@@ -255,5 +365,8 @@ async function autoplay(): Promise<boolean> {
 
 export function initRadio(): void {
   bus.on("trackchange", () => void topUp());
+  bus.on("trackchange", () => void preparePreview());
+  bus.on("queueupdate", () => void preparePreview());
+  bus.on("modechange", () => bus.emit("queueupdate", undefined));
   setAutoplayHandler(autoplay);
 }

@@ -294,6 +294,8 @@ export type QueueSource = "list" | "radio";
 export type RepeatMode = "off" | "all" | "one";
 
 let queueSource: QueueSource = "list";
+/** Where the list came from, for "Playing from …" in Up next. */
+let queueLabel = "Your queue";
 /** The list as it was given, for turning shuffle back off. */
 let originalQueue: string[] = [];
 let shuffleOn = storage.get<boolean>("groov:shuffle", false);
@@ -308,11 +310,13 @@ function shuffled<T>(items: T[]): T[] {
   return a;
 }
 
-export function setQueue(ids: string[], startId: string, source: QueueSource = "list"): void {
+export function setQueue(ids: string[], startId: string, source: QueueSource = "list", label?: string): void {
+  queueLabel = label ?? (source === "radio" ? "Radio" : "Your queue");
   const list = [...new Set(ids.length ? ids : [startId])];
   originalQueue = list;
   queueSource = source;
-  currentQueue = shuffleOn ? [startId, ...shuffled(list.filter((id) => id !== startId))] : list;
+  // A copy: the two lists must never be the same array (appends would double).
+  currentQueue = shuffleOn ? [startId, ...shuffled(list.filter((id) => id !== startId))] : [...list];
   currentQueueIndex = Math.max(0, currentQueue.indexOf(startId));
   manualCount = 0;
   bus.emit("queuechange", { source, remaining: currentQueue.length - 1 - currentQueueIndex });
@@ -331,6 +335,21 @@ function queueUpdated(): void {
 
 export function getUpcoming(): string[] {
   return currentQueue.slice(currentQueueIndex + 1);
+}
+
+/** Songs already played in this list (most recent last), for Up next. */
+export function getPlayedBefore(limit = 3): string[] {
+  return currentQueue.slice(Math.max(0, currentQueueIndex - limit), Math.max(0, currentQueueIndex));
+}
+
+/** Go back to a song played earlier in this list (n songs back). */
+export async function playBack(n: number): Promise<void> {
+  if (n <= 0 || currentQueueIndex - n < 0) return;
+  await playQueueIndex(currentQueueIndex - n);
+}
+
+export function getQueueLabel(): string {
+  return queueLabel;
 }
 
 function insertAt(id: string, offset: number): void {
@@ -453,7 +472,16 @@ export function queueFromElement(el: HTMLElement): void {
         (b) => b.dataset.id!,
       )
     : [id];
-  setQueue(ids, id);
+  const label = el.closest("#playlist-view")
+    ? document.getElementById("playlist-view-title")?.textContent?.replace(/^❤️ /, "")
+    : el.closest("#detail-view")
+      ? document.getElementById("detail-title")?.textContent
+      : el.closest("#results-view")
+        ? "Search results"
+        : el.closest("#stats-view")
+          ? "Your top songs"
+          : undefined;
+  setQueue(ids, id, "list", label || undefined);
 }
 
 const hasNext = () =>

@@ -76,6 +76,8 @@ export async function playMix(mix: Mix): Promise<void> {
   setQueue(
     songs.map((s) => s.id),
     start.id,
+    "list",
+    mix.title,
   );
   await playTrack(start.id);
   bus.emit("toast", `▶ ${mix.title}`);

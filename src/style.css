@@ -2680,3 +2680,180 @@ body.np-open {
     transform: none;
   }
 }
+
+/* --- Up next (YouTube Music style) ---------------------------------------- */
+
+.queue-from {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 6px 12px;
+}
+
+.queue-from-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.queue-from-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60vw;
+}
+
+.queue-save {
+  flex-shrink: 0;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg-strong);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 13px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.queue-row.played {
+  opacity: 0.55;
+  cursor: pointer;
+}
+
+.queue-row.current {
+  background: var(--glass-bg-strong);
+}
+
+.queue-row.current .queue-name {
+  color: var(--accent-2-bright);
+}
+
+.queue-row.auto {
+  cursor: pointer;
+}
+
+.queue-handle.placeholder {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.queue-art-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.queue-eq {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  width: 36px;
+  height: 18px;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.queue-eq i {
+  width: 3px;
+  background: var(--accent-2-bright);
+  border-radius: 2px;
+  animation: queue-eq 0.9s ease-in-out infinite;
+}
+
+.queue-eq i:nth-child(2) {
+  animation-delay: -0.3s;
+}
+
+.queue-eq i:nth-child(3) {
+  animation-delay: -0.6s;
+}
+
+@keyframes queue-eq {
+  0%,
+  100% {
+    height: 4px;
+  }
+  50% {
+    height: 16px;
+  }
+}
+
+.queue-section {
+  margin-top: 14px;
+  padding: 14px 6px 8px;
+  border-top: 1px solid var(--glass-border);
+}
+
+.queue-section-title {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.queue-section-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.queue-chips {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  overflow-x: auto;
+}
+
+.queue-chip {
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 13px;
+  padding: 7px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.queue-chip.active {
+  background: var(--text);
+  color: #120a24;
+  border-color: var(--text);
+}
+
+/* --- Scrollbars: slim, in the theme's colours, quiet until used ----------- */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--accent-2) 45%, transparent) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--accent-2) 30%, transparent);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--accent-2) 65%, transparent);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.queue-sheet.paused .queue-eq i {
+  animation-play-state: paused;
+}

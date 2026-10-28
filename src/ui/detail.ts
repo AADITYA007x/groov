@@ -133,6 +133,8 @@ export function initDetail(): void {
     setQueue(
       tracks.map((s) => s.id),
       start.id,
+      "list",
+      titleEl.textContent || undefined,
     );
     void playTrack(start.id);
   });
