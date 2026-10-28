@@ -27,6 +27,8 @@ interface NativeAudioPlugin {
     cover: string | null;
     songs: { id: string; title: string; artists: string; durationMs: number }[];
   }>;
+  eqInfo(): Promise<{ available: boolean; presets: string[]; preset: number; bass: number; bassAvailable: boolean }>;
+  setEq(o: { preset?: number; bass?: number }): Promise<void>;
   storageInfo(): Promise<{ bytes: number; songs: number; limitMb: number; downloadedBytes?: number; downloadedSongs?: number }>;
   download(o: { tracks: NativeTrack[] }): Promise<void>;
   removeDownloads(o: { keys: string[] }): Promise<void>;

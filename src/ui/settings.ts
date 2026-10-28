@@ -62,6 +62,57 @@ async function chooseCrossfade(): Promise<void> {
   renderCrossfade();
 }
 
+// --- Equalizer (Android) ----------------------------------------------------------
+
+const eqBtn = $("eq-btn");
+const bassBtn = $("bass-btn");
+const BASS = [
+  { label: "Off", value: 0 },
+  { label: "Light", value: 300 },
+  { label: "Medium", value: 600 },
+  { label: "Strong", value: 1000 },
+];
+
+async function renderEq(): Promise<Awaited<ReturnType<typeof nativeAudio.eqInfo>> | null> {
+  try {
+    const info = await nativeAudio.eqInfo();
+    eqBtn.style.display = info.available ? "block" : "none";
+    bassBtn.style.display = info.bassAvailable ? "block" : "none";
+    eqBtn.textContent = `Equalizer: ${info.preset >= 0 ? info.presets[info.preset] ?? "On" : "Off"}`;
+    const bass = BASS.reduce((best, b) => (Math.abs(b.value - info.bass) < Math.abs(best.value - info.bass) ? b : best));
+    bassBtn.textContent = `Bass boost: ${bass.label}`;
+    return info;
+  } catch {
+    return null; // older app version
+  }
+}
+
+async function chooseEq(): Promise<void> {
+  const info = await renderEq();
+  if (!info) return;
+  const choice = await chooseOption(
+    "Equalizer",
+    [{ label: "Off", value: -1, active: info.preset < 0 }, ...info.presets.map((name, i) => ({ label: name, value: i, active: info.preset === i }))],
+    "Sound presets from your phone. Applies to every song, with headphones and speakers.",
+  );
+  if (choice === null) return;
+  await nativeAudio.setEq({ preset: choice }).catch(() => undefined);
+  void renderEq();
+}
+
+async function chooseBass(): Promise<void> {
+  const info = await renderEq();
+  if (!info) return;
+  const choice = await chooseOption(
+    "Bass boost",
+    BASS.map((b) => ({ ...b, active: Math.abs(b.value - info.bass) < 150 })),
+    "Strong bass can distort on small phone speakers; it's best with headphones.",
+  );
+  if (choice === null) return;
+  await nativeAudio.setEq({ bass: choice }).catch(() => undefined);
+  void renderEq();
+}
+
 // --- Saved songs (Android cache) -----------------------------------------------------
 
 const LIMITS = [300, 800, 1500, 3000];
@@ -172,6 +223,9 @@ export function initSettings(): void {
     renderCrossfade();
     void renderStorage();
     crossfadeBtn.addEventListener("click", () => void chooseCrossfade());
+    void renderEq();
+    eqBtn.addEventListener("click", () => void chooseEq());
+    bassBtn.addEventListener("click", () => void chooseBass());
     storageBtn.addEventListener("click", () => void chooseStorage());
     document.getElementById("mobile-menu-toggle")?.addEventListener("click", () => void renderStorage());
   }
