@@ -18,6 +18,10 @@ interface NativeAudioPlugin {
   }>;
   crossfade(o: NativeTrack & { seconds: number }): Promise<{ cancelled: boolean; videoId?: string | null }>;
   musicVideo(o: NativeTrack & { audioSec: number }): Promise<{ videoId?: string | null }>;
+  importPlaylist(o: { url: string; max?: number }): Promise<{
+    name: string;
+    tracks: { videoId: string; title: string; artist: string; durationSec: number; artwork: string | null }[];
+  }>;
   storageInfo(): Promise<{ bytes: number; songs: number; limitMb: number; downloadedBytes?: number; downloadedSongs?: number }>;
   download(o: { tracks: NativeTrack[] }): Promise<void>;
   removeDownloads(o: { keys: string[] }): Promise<void>;

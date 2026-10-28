@@ -1,9 +1,10 @@
 // Navigation between the search/home view and playlist views, plus the
 // sidebar playlist list.
-import { deletePlaylist, getPlaylists, isOwner, removeTrackFromPlaylist, createPlaylist } from "../library/playlists";
+import { addTrackToPlaylist, deletePlaylist, getPlaylists, isOwner, removeTrackFromPlaylist, createPlaylist } from "../library/playlists";
+import { hasNativeAudio, nativeAudio } from "../player/native-audio";
 import { getAccount } from "../cloud/session";
 import { sharePlaylist } from "../cloud/sync";
-import { playPlaylist } from "../player/radio";
+import { playPlaylist, toItem } from "../player/radio";
 import { isShuffleOn, toggleShuffle } from "../player/player";
 import { findArtistId } from "../api/itunes";
 import { renderDetail } from "./detail";
@@ -204,6 +205,25 @@ function renderPlaylistMeta(playlist: Playlist): void {
 
 const downloadBtn = $("download-playlist-btn");
 
+/** Paste a YouTube / YouTube Music playlist link: it becomes a Groov playlist. */
+async function importFromYoutube(): Promise<void> {
+  const link = prompt(
+    "Paste a YouTube or YouTube Music playlist link.\n(In YouTube Music: open the playlist → ⋮ → Share → Copy link)",
+  );
+  if (!link?.trim()) return;
+  bus.emit("toast", "⤓ Importing playlist…");
+  try {
+    const { name, tracks } = await nativeAudio.importPlaylist({ url: link.trim(), max: 500 });
+    const id = createPlaylist(name.slice(0, 60));
+    for (const t of tracks) addTrackToPlaylist(id, toItem(t));
+    closeSidebar();
+    navigateToPlaylist(id);
+    bus.emit("toast", `⤓ Imported "${name}" · ${tracks.length} songs`);
+  } catch (err) {
+    bus.emit("toast", `Couldn't import: ${(err as Error)?.message || "check the link"}`);
+  }
+}
+
 function renderDownloadBtn(playlist: Playlist): void {
   if (!canDownload || !playlist.tracks.length) {
     downloadBtn.style.display = "none";
@@ -298,7 +318,15 @@ export function initViews(): void {
     closeSidebar();
   });
 
-  $("create-playlist").addEventListener("click", () => {
+  $("create-playlist").addEventListener("click", async () => {
+    const choice = hasNativeAudio
+      ? await chooseOption("Add a playlist", [
+          { label: "＋ New playlist", value: "new" },
+          { label: "⤓ Import from YouTube / YouTube Music", value: "import" },
+        ])
+      : "new";
+    if (choice === "import") return void importFromYoutube();
+    if (choice !== "new") return;
     const name = prompt("Playlist name");
     if (name === null) return;
     navigateToPlaylist(createPlaylist(name || "New Playlist"));

@@ -115,7 +115,7 @@ function parseQuotedTitle(title: string): { artist: string; title: string } | nu
   return m ? { artist: latinName(m[1]), title: m[2].trim() } : null;
 }
 
-function toItem(t: RadioTrack): Item {
+export function toItem(t: RadioTrack): Item {
   const quoted = parseQuotedTitle(t.title || "");
   const artist = quoted?.artist || channelToArtist(cleanArtist(t.artist || ""));
   return {
