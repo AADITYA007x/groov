@@ -13,15 +13,12 @@ import {
   removeUpcoming,
 } from "../player/player";
 import {
-  getAutoplayFilter,
   getAutoplayPreview,
   getRadioSeed,
   isAutoplayLoading,
   isAutoplayOn,
   playFromAutoplay,
   removeFromAutoplay,
-  setAutoplayFilter,
-  type AutoplayFilter,
 } from "../player/radio";
 import { addTrackToPlaylist, createPlaylist, getPlaylists } from "../library/playlists";
 import { bus, trackRegistry } from "../state";
@@ -61,12 +58,6 @@ function rowMarkup(item: Item, attrs: string, cls: string, left: string, right: 
     </div>`;
 }
 
-const FILTERS: { id: AutoplayFilter; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "familiar", label: "Familiar" },
-  { id: "discover", label: "Discover" },
-];
-
 function autoplayMarkup(): string {
   const { source } = getQueueInfo();
   if (source !== "list") return "";
@@ -80,9 +71,6 @@ function autoplayMarkup(): string {
     <div class="queue-section">
       <div class="queue-section-title">Autoplay</div>
       <div class="queue-section-sub">${sub}</div>
-      <div class="queue-chips">${FILTERS.map(
-        (f) => `<button class="queue-chip${getAutoplayFilter() === f.id ? " active" : ""}" data-filter="${f.id}">${f.label}</button>`,
-      ).join("")}</div>
     </div>`;
   if (!shown) {
     return isAutoplayLoading()
@@ -103,8 +91,8 @@ function autoplayMarkup(): string {
     )
     .join("");
   return (
-    header(`More like "${escapeHtml(shown.seed.name)}" · plays after your list`) +
-    (rows || `<div class="queue-empty">No ${getAutoplayFilter() === "familiar" ? "familiar" : "new"} songs here. Try another filter.</div>`)
+    header(`More like your list · plays when it ends`) +
+    (rows || `<div class="queue-empty">You removed them all. More will come when your list ends.</div>`)
   );
 }
 
@@ -240,11 +228,6 @@ export function initQueue(): void {
     const play = target.closest<HTMLElement>("[data-play]");
     if (play) {
       void playUpcoming(Number(play.dataset.play));
-      return;
-    }
-    const filterBtn = target.closest<HTMLElement>("[data-filter]");
-    if (filterBtn) {
-      setAutoplayFilter(filterBtn.dataset.filter as AutoplayFilter);
       return;
     }
     const autoRemove = target.closest<HTMLElement>("[data-auto-remove]");

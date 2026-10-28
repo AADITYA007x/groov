@@ -21,7 +21,6 @@ import {
   setQueue,
 } from "./player";
 import { storage } from "../utils";
-import { topSongs } from "../library/history";
 
 interface RadioTrack {
   videoId: string;
@@ -63,7 +62,25 @@ export function cleanTitle(title: string, artist: string): string {
     .replace(/\s*\|.*$/, "")
     .trim();
   if (artist) s = s.replace(new RegExp(`^${escapeRegex(artist)}\\s*[-–—:]\\s*`, "i"), "");
+  // "Alok & Alan Walker - Headlights", "Alan Walker, Sabrina Carpenter - On My Way":
+  // the part before " - " is the artists when it mentions this artist.
+  const dash = s.match(/^(.+?)\s+[-–—]\s+(.+)$/);
+  if (dash && artist && sameArtist(dash[1], artist)) s = dash[2].trim();
   return s || title;
+}
+
+const normName = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+
+/** Does "Alok & Alan Walker" mention "Alan Walker and Alok" (or vice versa)? */
+function sameArtist(credits: string, artist: string): boolean {
+  const a = artist.split(/,|&| and | x | feat\.? /i).map(normName).filter((x) => x.length > 2);
+  const c = normName(credits);
+  return a.some((name) => c.includes(name));
+}
+
+/** Short name for a song: without "(with …)", "(feat. …)", "[Remix]". */
+export function shortTitle(name: string): string {
+  return name.replace(/\s*[([][^)\]]*[)\]]/g, "").trim() || name;
 }
 
 function toItem(t: RadioTrack): Item {
@@ -130,7 +147,7 @@ export async function startRadio(seed?: Item): Promise<void> {
   items.forEach((i) => trackRegistry.set(i.id, i));
   trackRegistry.set(item.id, item);
   seedName = item.name;
-  setQueue([item.id, ...items.map((i) => i.id)], item.id, "radio", `Radio · ${item.name}`);
+  setQueue([item.id, ...items.map((i) => i.id)], item.id, "radio", `Radio · ${shortTitle(item.name)}`);
   if (getCurrentTrackId() !== item.id) await playTrack(item.id);
   bus.emit("toast", `📻 Radio based on "${item.name}"`);
 }
@@ -231,8 +248,6 @@ export async function playPlaylist(playlistId: string): Promise<void> {
 // Filter it with All / Familiar (songs you know) / Discover (new to you).
 // Off in Settings, or with Repeat on.
 
-export type AutoplayFilter = "all" | "familiar" | "discover";
-
 export function isAutoplayOn(): boolean {
   return storage.get<boolean>("groov:autoplay", true);
 }
@@ -242,33 +257,14 @@ export function setAutoplay(on: boolean): void {
   bus.emit("queueupdate", undefined);
 }
 
-let filter: AutoplayFilter = storage.get<AutoplayFilter>("groov:autoplay-filter", "all");
 let preview: { seedId: string; seed: Item; items: Item[] } | null = null;
 let previewLoading: string | null = null;
 /** Last song a preview was tried for (don't retry in a loop when offline). */
 let previewTriedFor: string | null = null;
 const removed = new Set<string>();
 
-export function getAutoplayFilter(): AutoplayFilter {
-  return filter;
-}
-
-export function setAutoplayFilter(f: AutoplayFilter): void {
-  filter = f;
-  storage.set("groov:autoplay-filter", f);
-  bus.emit("queueupdate", undefined);
-}
-
-const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
-const songKey = (i: Item) => `${norm(cleanTitle(i.name, ""))}|${norm(i.subtitle.split(/,|&/)[0])}`;
-
-/** Songs you know: in your playlists or listening history. */
-function knownKeys(): Set<string> {
-  const keys = new Set<string>();
-  for (const t of librarySongs()) keys.add(songKey(t));
-  for (const s of topSongs(0, 2000)) keys.add(songKey(s.item));
-  return keys;
-}
+/** Same song even when one copy came from iTunes and one from YouTube. */
+const songKey = (i: Item) => `${normName(shortTitle(cleanTitle(i.name, i.subtitle)))}|${normName(i.subtitle).slice(0, 4)}`;
 
 /** Songs that will autoplay after your list (already filtered). */
 export function getAutoplayPreview(): { seed: Item; items: Item[] } | null {
@@ -276,11 +272,7 @@ export function getAutoplayPreview(): { seed: Item; items: Item[] } | null {
   const { lastId } = getQueueInfo();
   if (preview.seedId !== lastId) return null;
   const inQueue = new Set([...getUpcoming(), getCurrentTrackId()]);
-  let items = preview.items.filter((i) => !removed.has(i.id) && !inQueue.has(i.id));
-  if (filter !== "all") {
-    const known = knownKeys();
-    items = items.filter((i) => known.has(songKey(i)) === (filter === "familiar"));
-  }
+  const items = preview.items.filter((i) => !removed.has(i.id) && !inQueue.has(i.id));
   return { seed: preview.seed, items };
 }
 
@@ -297,6 +289,35 @@ function autoplayApplies(): boolean {
   return isAutoplayOn() && getQueueInfo().source === "list" && getRepeatMode() === "off";
 }
 
+/**
+ * Radio that fits the whole list, not just its last song: YouTube Music's mix
+ * after the last song and after the one before it, taken in turns. (One odd
+ * last song — a feature, a remix — no longer decides everything.)
+ */
+async function radioForList(last: Item): Promise<Item[]> {
+  const upcoming = getUpcoming();
+  const beforeId = upcoming.length >= 2 ? upcoming[upcoming.length - 2] : getCurrentTrackId();
+  const before = beforeId && beforeId !== last.id ? trackRegistry.get(beforeId) : undefined;
+  const [a, b] = await Promise.all([
+    radioAfter(last).catch(() => [] as Item[]),
+    before ? radioAfter(before).catch(() => [] as Item[]) : Promise.resolve([] as Item[]),
+  ]);
+  const listKeys = new Set([...upcoming, getCurrentTrackId()].map((id) => id && trackRegistry.get(id)).filter(Boolean).map((i) => songKey(i as Item)));
+  const seen = new Set<string>();
+  const out: Item[] = [];
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    for (const item of [a[i], b[i]]) {
+      if (!item) continue;
+      const key = songKey(item);
+      if (seen.has(key) || listKeys.has(key)) continue;
+      seen.add(key);
+      out.push(item);
+    }
+  }
+  if (!out.length) throw new Error("no radio");
+  return out.slice(0, 40);
+}
+
 /** Near the end of your list: get the autoplay songs ready. */
 async function preparePreview(): Promise<void> {
   if (!autoplayApplies()) return;
@@ -308,7 +329,7 @@ async function preparePreview(): Promise<void> {
   previewTriedFor = lastId;
   bus.emit("queueupdate", undefined);
   try {
-    const items = (await radioAfter(seed)).filter((i) => i.id !== seed.id);
+    const items = await radioForList(seed);
     items.forEach((i) => trackRegistry.set(i.id, i));
     preview = { seedId: lastId, seed, items };
     removed.clear();
@@ -326,7 +347,7 @@ export async function playFromAutoplay(id: string): Promise<void> {
   if (!shown) return;
   const index = shown.items.findIndex((i) => i.id === id);
   if (index < 0) return;
-  const label = `Radio · ${shown.seed.name}`;
+  const label = `Radio · ${shortTitle(shown.seed.name)}`;
   const current = getCurrentTrackId();
   const ids = shown.items.slice(index).map((i) => i.id);
   setQueue(current ? [current, ...ids] : ids, current ?? ids[0], "radio", label);
@@ -352,7 +373,7 @@ async function autoplay(): Promise<boolean> {
     if (!items.length || getCurrentTrackId() !== item.id) return false;
     items.forEach((i) => trackRegistry.set(i.id, i));
     seedName = item.name;
-    setQueue([item.id, ...items.map((i) => i.id)], item.id, "radio", `Radio · ${item.name}`);
+    setQueue([item.id, ...items.map((i) => i.id)], item.id, "radio", `Radio · ${shortTitle(item.name)}`);
     preview = null;
     return true;
   } catch {
