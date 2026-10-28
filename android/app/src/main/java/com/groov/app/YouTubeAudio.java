@@ -270,21 +270,26 @@ final class YouTubeAudio {
     }
 
     /** {bytes used, number of songs}. */
-    /** {bytes, songs, downloaded bytes, downloaded songs}. */
+    /** {bytes, songs, downloaded bytes, downloaded songs, smart bytes, smart songs}. */
     long[] cacheStats() {
         File[] files = cacheDir.listFiles((dir, name) -> !name.endsWith(".part"));
         Set<String> pinned = pinnedIds();
-        long bytes = 0, pinnedBytes = 0, pinnedSongs = 0;
+        Set<String> smart = smartIds();
+        long bytes = 0, pinnedBytes = 0, pinnedSongs = 0, smartBytes = 0, smartSongs = 0;
         if (files != null) {
             for (File f : files) {
                 bytes += f.length();
-                if (pinned.contains(videoIdOf(f))) {
+                String id = videoIdOf(f);
+                if (pinned.contains(id)) {
                     pinnedBytes += f.length();
                     pinnedSongs++;
+                } else if (smart.contains(id)) {
+                    smartBytes += f.length();
+                    smartSongs++;
                 }
             }
         }
-        return new long[] { bytes, files == null ? 0 : files.length, pinnedBytes, pinnedSongs };
+        return new long[] { bytes, files == null ? 0 : files.length, pinnedBytes, pinnedSongs, smartBytes, smartSongs };
     }
 
     /** Delete saved songs except the one playing (and downloads, unless asked). */
@@ -299,6 +304,7 @@ final class YouTubeAudio {
             }
         }
         if (includeDownloads) ids.edit().remove(PINNED).apply();
+        ids.edit().remove(SMART).apply(); // smart downloads come back by themselves
         return deleted;
     }
 
@@ -334,6 +340,78 @@ final class YouTubeAudio {
         if (videoId == null) return;
         Set<String> set = pinnedIds();
         if (set.remove(videoId)) ids.edit().putStringSet(PINNED, set).apply();
+    }
+
+    // --- Smart downloads: mixes kept for offline automatically ---------------
+    // Their own budget; removed before your own downloads when space is short.
+
+    private static final String SMART = "smart";
+
+    synchronized Set<String> smartIds() {
+        return new HashSet<>(ids.getStringSet(SMART, new HashSet<>()));
+    }
+
+    /**
+     * Keep exactly these songs as smart downloads (in order of importance),
+     * downloading what's missing, within `limitMb`. Songs that drop out
+     * become normal saved songs. Returns how many are kept.
+     */
+    int setSmart(List<Track> tracks, int limitMb) {
+        long budget = limitMb * 1024L * 1024L;
+        long used = 0;
+        Set<String> pinned = pinnedIds();
+        Set<String> keep = new HashSet<>();
+        for (Track track : tracks) {
+            if (used >= budget) break;
+            try {
+                File f = fetch(track);
+                String videoId = knownVideoId(track.key);
+                if (videoId == null) continue;
+                if (!pinned.contains(videoId)) used += f.length(); // your downloads aren't counted
+                keep.add(videoId);
+                synchronized (this) {
+                    Set<String> set = smartIds();
+                    set.add(videoId);
+                    ids.edit().putStringSet(SMART, set).apply();
+                }
+            } catch (Exception e) {
+                if (isNetworkError(e)) break; // lost Wi-Fi: try again later
+                Log.i(TAG, "Smart download skipped " + track.title + ": " + describe(e));
+            }
+        }
+        synchronized (this) {
+            ids.edit().putStringSet(SMART, keep).apply();
+        }
+        return keep.size();
+    }
+
+    /**
+     * Phone storage nearly full: free room. Saved songs go first, then smart
+     * downloads (oldest first); your own downloads are never removed.
+     */
+    private void freeSpaceIfLow(File keep) {
+        long minFree = 300L * 1024 * 1024;
+        if (cacheDir.getUsableSpace() >= minFree) return;
+        File[] files = cacheDir.listFiles((dir, name) -> !name.endsWith(".part"));
+        if (files == null) return;
+        Set<String> pinned = pinnedIds();
+        Set<String> smart = smartIds();
+        Arrays.sort(files, (a, b) -> Long.compare(a.lastModified(), b.lastModified()));
+        for (int pass = 0; pass < 2; pass++) {
+            for (File f : files) {
+                if (cacheDir.getUsableSpace() >= minFree) return;
+                String id = videoIdOf(f);
+                if (f.equals(keep) || pinned.contains(id)) continue;
+                if ((pass == 0) == smart.contains(id)) continue; // pass 0: saved songs; pass 1: smart
+                if (f.delete() && pass == 1) {
+                    synchronized (this) {
+                        Set<String> set = smartIds();
+                        set.remove(id);
+                        ids.edit().putStringSet(SMART, set).apply();
+                    }
+                }
+            }
+        }
     }
 
     boolean isDownloaded(String key) {
@@ -568,8 +646,15 @@ final class YouTubeAudio {
         if (files == null) return;
         long total = 0;
         for (File f : files) total += f.length();
-        // Downloads don't count towards the limit and are never removed.
+        freeSpaceIfLow(keep);
+        files = cacheDir.listFiles((dir, name) -> !name.endsWith(".part"));
+        if (files == null) return;
+        total = 0;
+        for (File f : files) total += f.length();
+        // Downloads (yours and smart ones) don't count towards the limit and
+        // aren't removed here.
         Set<String> pinned = pinnedIds();
+        pinned.addAll(smartIds());
         for (File f : files) if (pinned.contains(videoIdOf(f))) total -= f.length();
         long limit = cacheLimitMb() * 1024L * 1024L;
         if (total <= limit) return;

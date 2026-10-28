@@ -1,9 +1,10 @@
 // Home feed: "Made for you" mixes and recently played (from what you listen
 // to), the live top-songs chart, and "Recommended for you" (more from
 // artists/genres already in your playlists).
-import { fetchArtistTracks, fetchCategory, fetchTrendingSongs } from "../api/itunes";
+import { fetchArtistTracks, fetchTrendingSongs } from "../api/itunes";
 import { OVERVIEW_LIMIT } from "../config";
-import { recentlyPlayed } from "../library/history";
+import { historySize, recentlyPlayed } from "../library/history";
+import { loadSimilar } from "../library/similar";
 import { cachedMixSongs, getMixes, loadMixSongs, warmMixes, type Mix } from "../library/mixes";
 import { getPlaylists } from "../library/playlists";
 import { isShuffleOn, playTrack, setQueue } from "../player/player";
@@ -130,10 +131,10 @@ function recommendationSignals() {
 }
 
 async function renderRecommendations(): Promise<void> {
-  const { allTracks, artistCounts, genreCounts } = recommendationSignals();
+  const { allTracks, artistCounts } = recommendationSignals();
   recommendationsSection.style.display = "block";
 
-  if (!allTracks.length) {
+  if (!allTracks.length && historySize() < 5) {
     recommendationsContainer.innerHTML = `<p class="muted">Add a few songs to a playlist and recommendations based on them will show up here.</p>`;
     return;
   }
@@ -143,21 +144,19 @@ async function renderRecommendations(): Promise<void> {
     items.filter((i) => !savedIds.has(i.id)).slice(0, OVERVIEW_LIMIT);
 
   const topArtists = [...artistCounts.entries()].sort((a, b) => b[1].count - a[1].count).slice(0, 2);
-  const topGenre = [...genreCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
 
   // Run lookups in parallel; one failing shouldn't blank the others.
-  const jobs: Promise<string>[] = topArtists.map(async ([artistId, info]) => {
-    const items = fresh(await fetchArtistTracks(artistId, OVERVIEW_LIMIT + 4));
-    return items.length ? sectionMarkup(`More by ${info.name}`, items) : "";
-  });
-  if (topGenre) {
-    jobs.push(
-      (async () => {
-        const items = fresh(await fetchCategory(topGenre, "tracks", OVERVIEW_LIMIT + 4));
-        return items.length ? sectionMarkup(`Because you like ${topGenre}`, items) : "";
-      })(),
-    );
-  }
+  // New artists first: "Similar to [one of your top artists]" (not them).
+  const jobs: Promise<string>[] = [
+    (async () => {
+      const similar = await loadSimilar();
+      return similar ? sectionMarkup(`Similar to ${similar.artist}`, similar.items) : "";
+    })(),
+    ...topArtists.map(async ([artistId, info]) => {
+      const items = fresh(await fetchArtistTracks(artistId, OVERVIEW_LIMIT + 4));
+      return items.length ? sectionMarkup(`More by ${info.name}`, items) : "";
+    }),
+  ];
   const sections = (await Promise.allSettled(jobs))
     .map((r) => (r.status === "fulfilled" ? r.value : ""))
     .join("");

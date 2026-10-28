@@ -438,6 +438,48 @@ public class NativeAudioPlugin extends Plugin {
         }
     }
 
+    /** True on Wi-Fi (or any network that isn't charged by the MB). */
+    private boolean onUnmeteredNetwork() {
+        android.net.ConnectivityManager cm =
+            (android.net.ConnectivityManager) getContext().getSystemService(android.content.Context.CONNECTIVITY_SERVICE);
+        if (cm == null) return false;
+        android.net.NetworkCapabilities caps = cm.getNetworkCapabilities(cm.getActiveNetwork());
+        return caps != null
+            && caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            && caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED);
+    }
+
+    /**
+     * Smart downloads: keep these songs offline (most important first) within
+     * {limitMb}. Only on Wi-Fi unless {wifiOnly: false}: rejects "not-wifi".
+     * A "smartdone" event {kept} when finished.
+     */
+    @PluginMethod
+    public void smartDownload(PluginCall call) {
+        boolean wifiOnly = !Boolean.FALSE.equals(call.getBoolean("wifiOnly", true));
+        if (wifiOnly && !onUnmeteredNetwork()) {
+            call.reject("not-wifi");
+            return;
+        }
+        JSArray tracks = call.getArray("tracks");
+        Integer limit = call.getInt("limitMb", 600);
+        java.util.List<YouTubeAudio.Track> list = new java.util.ArrayList<>();
+        if (tracks != null) {
+            for (int i = 0; i < tracks.length(); i++) {
+                org.json.JSONObject o = tracks.optJSONObject(i);
+                if (o == null || o.optString("key", "").isEmpty()) continue;
+                list.add(new YouTubeAudio.Track(o.optString("key"), o.optString("title", ""), o.optString("artist", ""), o.optLong("durationMs", 0)));
+            }
+        }
+        call.resolve();
+        downloader.execute(() -> {
+            int kept = youtube.setSmart(list, limit == null ? 600 : limit);
+            JSObject event = new JSObject();
+            event.put("kept", kept);
+            notifyListeners("smartdone", event);
+        });
+    }
+
     /** Stop keeping songs for offline: {keys: [...]}. */
     @PluginMethod
     public void removeDownloads(PluginCall call) {
@@ -472,6 +514,8 @@ public class NativeAudioPlugin extends Plugin {
         result.put("songs", stats[1]);
         result.put("downloadedBytes", stats[2]);
         result.put("downloadedSongs", stats[3]);
+        result.put("smartBytes", stats[4]);
+        result.put("smartSongs", stats[5]);
         result.put("limitMb", youtube.cacheLimitMb());
         call.resolve(result);
     }

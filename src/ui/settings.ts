@@ -94,6 +94,15 @@ async function chooseEq(): Promise<void> {
     "Equalizer",
     [{ label: "Off", value: -1, active: info.preset < 0 }, ...info.presets.map((name, i) => ({ label: name, value: i, active: info.preset === i }))],
     "Sound presets from your phone. Applies to every song, with headphones and speakers.",
+    `<b>How to choose</b>
+     <ul>
+       <li><b>Off / Normal</b>: the song as the artist made it. Start here.</li>
+       <li><b>Pop</b>: clearer vocals. A good everyday pick with earphones.</li>
+       <li><b>Rock</b>: punchier drums and guitars.</li>
+       <li><b>Dance / Hip Hop</b>: more low end for beats.</li>
+       <li><b>Classical / Jazz</b>: softer, more natural.</li>
+     </ul>
+     Play a song you know well and switch presets while it plays. Keep the one you'd miss if you turned it off; if you can't hear a difference, choose Off.`,
   );
   if (choice === null) return;
   await nativeAudio.setEq({ preset: choice }).catch(() => undefined);
@@ -107,6 +116,13 @@ async function chooseBass(): Promise<void> {
     "Bass boost",
     BASS.map((b) => ({ ...b, active: Math.abs(b.value - info.bass) < 150 })),
     "Strong bass can distort on small phone speakers; it's best with headphones.",
+    `<b>How to choose</b>
+     <ul>
+       <li><b>Earphones / headphones</b>: Light or Medium.</li>
+       <li><b>Phone speaker</b>: Off — small speakers crackle with boosted bass.</li>
+       <li><b>Bluetooth speaker</b>: Light, only if it sounds thin.</li>
+     </ul>
+     Safe start: Equalizer <b>Pop</b> + Bass boost <b>Light</b>. If the sound gets muddy or crackles, go one step down.`,
   );
   if (choice === null) return;
   await nativeAudio.setEq({ bass: choice }).catch(() => undefined);

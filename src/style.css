@@ -3017,3 +3017,40 @@ body.np-open {
 .playlist-row {
   cursor: pointer;
 }
+
+.choice-info-btn {
+  margin-left: auto;
+  margin-right: 8px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--text);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.choice-info-btn.active {
+  background: var(--accent-2-bright);
+  color: #120a24;
+}
+
+.choice-info {
+  margin: 0 14px 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--glass-bg);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.choice-info b {
+  color: var(--text);
+}
+
+.choice-info ul {
+  margin: 6px 0;
+  padding-left: 18px;
+}
