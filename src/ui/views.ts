@@ -20,7 +20,7 @@ function renderShuffleToggle(): void {
   btn.setAttribute("aria-pressed", String(on));
   btn.textContent = on ? "🔀 Shuffle on" : "🔀 Shuffle";
 }
-import type { Playlist } from "../types";
+import type { Item, Playlist } from "../types";
 import { bus } from "../state";
 import { $, escapeHtml } from "../utils";
 import { playlistRowMarkup } from "./cards";
@@ -205,17 +205,39 @@ function renderPlaylistMeta(playlist: Playlist): void {
 
 const downloadBtn = $("download-playlist-btn");
 
-/** Paste a YouTube / YouTube Music playlist link: it becomes a Groov playlist. */
+/** Paste a YouTube, YouTube Music or Spotify link: it becomes a Groov playlist. */
 async function importFromYoutube(): Promise<void> {
   const link = prompt(
-    "Paste a YouTube or YouTube Music playlist link.\n(In YouTube Music: open the playlist → ⋮ → Share → Copy link)",
+    "Paste a playlist link from YouTube, YouTube Music or Spotify.\n(In the app: open the playlist → ⋮ / ··· → Share → Copy link)",
   );
   if (!link?.trim()) return;
   bus.emit("toast", "⤓ Importing playlist…");
   try {
-    const { name, tracks } = await nativeAudio.importPlaylist({ url: link.trim(), max: 500 });
+    const url = link.trim();
+    let name: string;
+    let items: Item[];
+    if (/spotify\.com|^spotify:/i.test(url)) {
+      // Spotify gives names only; each song is found on YouTube Music when it plays.
+      const r = await nativeAudio.importSpotify({ url });
+      name = r.name;
+      items = r.songs.map((s) => ({
+        id: `sp-${s.id}`,
+        name: s.title,
+        subtitle: s.artists,
+        artwork: null,
+        previewUrl: null,
+        externalUrl: `https://open.spotify.com/track/${s.id}`,
+        topSubtitle: `Song · ${s.artists}`,
+        durationMs: s.durationMs || undefined,
+      }));
+    } else {
+      const r = await nativeAudio.importPlaylist({ url, max: 500 });
+      name = r.name;
+      items = r.tracks.map(toItem);
+    }
+    const tracks = items;
     const id = createPlaylist(name.slice(0, 60));
-    for (const t of tracks) addTrackToPlaylist(id, toItem(t));
+    for (const t of tracks) addTrackToPlaylist(id, t);
     closeSidebar();
     navigateToPlaylist(id);
     bus.emit("toast", `⤓ Imported "${name}" · ${tracks.length} songs`);
@@ -322,7 +344,7 @@ export function initViews(): void {
     const choice = hasNativeAudio
       ? await chooseOption("Add a playlist", [
           { label: "＋ New playlist", value: "new" },
-          { label: "⤓ Import from YouTube / YouTube Music", value: "import" },
+          { label: "⤓ Import from YouTube, YouTube Music or Spotify", value: "import" },
         ])
       : "new";
     if (choice === "import") return void importFromYoutube();

@@ -155,6 +155,7 @@ export function initMediaControls(): void {
     bindWebHandlers();
   }
   bus.on("trackchange", sync);
+  bus.on("artworkchange", sync);
   bus.on("playstate", sync);
   bus.on("seeked", sync);
   // Android hides the seek bar until it knows the length, so resend then.

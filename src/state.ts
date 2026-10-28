@@ -63,4 +63,6 @@ export const bus = createEmitter<{
   followchange: void;
   /** Offline downloads progressed or changed. */
   downloadchange: void;
+  /** The playing song got a picture (it had none). */
+  artworkchange: Item;
 }>();

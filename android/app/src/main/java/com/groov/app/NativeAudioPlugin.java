@@ -338,6 +338,7 @@ public class NativeAudioPlugin extends Plugin {
                 try {
                     youtube.pin(track);
                     event.put("ok", true);
+                    event.put("videoId", youtube.knownVideoId(track.key));
                 } catch (Exception e) {
                     Log.i(TAG, "Download failed for " + track.title + ": " + YouTubeAudio.describe(e));
                     event.put("ok", false);
@@ -460,6 +461,35 @@ public class NativeAudioPlugin extends Plugin {
                 call.resolve(result);
             } catch (Exception e) {
                 Log.w(TAG, "Import failed for " + url, e);
+                String msg = e.getMessage();
+                call.reject(msg != null && !msg.isEmpty() ? msg : YouTubeAudio.describe(e));
+            }
+        });
+    }
+
+    /** A public Spotify playlist/album: {url} → {name, cover, songs: [{id, title, artists, durationMs}]}. */
+    @PluginMethod
+    public void importSpotify(PluginCall call) {
+        String url = call.getString("url", "");
+        radioWorker.execute(() -> {
+            try {
+                SpotifyImport.Result r = SpotifyImport.fetch(url);
+                JSArray songs = new JSArray();
+                for (SpotifyImport.Song s : r.songs) {
+                    JSObject o = new JSObject();
+                    o.put("id", s.id);
+                    o.put("title", s.title);
+                    o.put("artists", s.artists);
+                    o.put("durationMs", s.durationMs);
+                    songs.put(o);
+                }
+                JSObject result = new JSObject();
+                result.put("name", r.name);
+                result.put("cover", r.cover);
+                result.put("songs", songs);
+                call.resolve(result);
+            } catch (Exception e) {
+                Log.w(TAG, "Spotify import failed for " + url, e);
                 String msg = e.getMessage();
                 call.reject(msg != null && !msg.isEmpty() ? msg : YouTubeAudio.describe(e));
             }

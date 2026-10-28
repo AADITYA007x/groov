@@ -15,6 +15,7 @@
 // re-parenting a live iframe reloads it and restarts the song.
 import { loadYoutubeIframeApi, resolveVideoId } from "../api/youtube";
 import { shareVideoId } from "../cloud/shared";
+import { fillMissingArtwork } from "../library/playlists";
 import { bus, trackRegistry } from "../state";
 import type { Item } from "../types";
 import { $, storage } from "../utils";
@@ -670,6 +671,12 @@ export async function playTrack(id: string): Promise<void> {
       if (cancelled || currentTrackId !== id) return;
       nativeVideoId = videoId ?? null;
       if (videoId) shareVideoId(item.id, videoId);
+      if (videoId && !item.artwork) {
+        // Imported from Spotify (no pictures): use the YouTube thumbnail.
+        item.artwork = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+        fillMissingArtwork(item.id, videoId);
+        bus.emit("artworkchange", item);
+      }
       bus.emit("loading", false);
       prefetchNext();
       return;

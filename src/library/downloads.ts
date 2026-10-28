@@ -4,7 +4,7 @@ import { hasNativeAudio, nativeAudio, toNativeTrack } from "../player/native-aud
 import { bus } from "../state";
 import type { Playlist } from "../types";
 import { storage } from "../utils";
-import { getPlaylists } from "./playlists";
+import { fillMissingArtwork, getPlaylists } from "./playlists";
 
 const KEY = "groov:downloaded-playlists";
 
@@ -100,9 +100,10 @@ export function retryFailed(): void {
 
 export function initDownloads(): void {
   if (!canDownload) return;
-  void nativeAudio.addListener("download", ({ key, ok }) => {
+  void nativeAudio.addListener("download", ({ key, ok, videoId }) => {
     pending.delete(key);
     if (ok) done.add(key);
+    if (ok && videoId) fillMissingArtwork(key, videoId);
     else failed.add(key);
     bus.emit("downloadchange", undefined);
   });

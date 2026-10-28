@@ -22,6 +22,11 @@ interface NativeAudioPlugin {
     name: string;
     tracks: { videoId: string; title: string; artist: string; durationSec: number; artwork: string | null }[];
   }>;
+  importSpotify(o: { url: string }): Promise<{
+    name: string;
+    cover: string | null;
+    songs: { id: string; title: string; artists: string; durationMs: number }[];
+  }>;
   storageInfo(): Promise<{ bytes: number; songs: number; limitMb: number; downloadedBytes?: number; downloadedSongs?: number }>;
   download(o: { tracks: NativeTrack[] }): Promise<void>;
   removeDownloads(o: { keys: string[] }): Promise<void>;
@@ -39,7 +44,7 @@ interface NativeAudioPlugin {
   ): Promise<PluginListenerHandle>;
   addListener(event: "ended", fn: () => void): Promise<PluginListenerHandle>;
   addListener(event: "error", fn: (e: { message?: string }) => void): Promise<PluginListenerHandle>;
-  addListener(event: "download", fn: (e: { key: string; ok: boolean; error?: string }) => void): Promise<PluginListenerHandle>;
+  addListener(event: "download", fn: (e: { key: string; ok: boolean; error?: string; videoId?: string | null }) => void): Promise<PluginListenerHandle>;
 }
 
 export const nativeAudio = registerPlugin<NativeAudioPlugin>("NativeAudio");

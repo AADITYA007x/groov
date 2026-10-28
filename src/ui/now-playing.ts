@@ -237,6 +237,7 @@ export function initNowPlaying(): void {
     if (currentItem) toggleLike(currentItem);
   });
   bus.on("trackchange", () => setTimeout(renderLike, 0));
+  bus.on("artworkchange", (item) => renderTrack(item));
   bus.on("likechange", renderLike);
   bus.on("playlistschange", renderLike);
   // Tap an artist's name to open their page (each artist separately).

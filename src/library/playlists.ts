@@ -91,3 +91,23 @@ export function removeTrackFromPlaylist(playlistId: string, trackId: string): vo
   save(playlists);
   if (playlist.cloud) enqueue({ type: "removeTrack", playlistId, trackKey: trackId });
 }
+
+/**
+ * Songs imported without a picture (from Spotify): once YouTube knows the
+ * song, use the video's thumbnail. Saved on this phone.
+ */
+export function fillMissingArtwork(trackId: string, videoId: string): string | null {
+  const url = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+  const playlists = getPlaylists();
+  let changed = false;
+  for (const p of Object.values(playlists)) {
+    for (const t of p.tracks) {
+      if (t.id === trackId && !t.artwork) {
+        t.artwork = url;
+        changed = true;
+      }
+    }
+  }
+  if (changed) save(playlists);
+  return changed ? url : null;
+}
