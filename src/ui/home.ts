@@ -54,7 +54,7 @@ function renderMadeForYou(): void {
     })
     .join("");
 
-  const recent = recentlyPlayed(6);
+  const recent = recentlyPlayed(15);
   recentSection.style.display = recent.length >= 2 ? "block" : "none";
   recentGrid.innerHTML = recent.map((item) => cardMarkup(item, "tracks")).join("");
   void warmMixes();

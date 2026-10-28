@@ -98,7 +98,7 @@ function renderSections(matches: SearchResult["matches"], query: string): void {
         <h2 class="section-title">${label}</h2>
         ${hasMore ? `<button class="see-all">See all</button>` : ""}
       </div>
-      <div class="card-grid">${gridHtml(visible)}</div>
+      <div class="card-grid card-row">${gridHtml(visible)}</div>
     `;
 
     if (hasMore) {
@@ -107,6 +107,7 @@ function renderSections(matches: SearchResult["matches"], query: string): void {
       const grid = section.querySelector<HTMLElement>(".card-grid")!;
       btn.addEventListener("click", async () => {
         if (btn.textContent === "Show less") {
+          grid.classList.add("card-row");
           grid.innerHTML = gridHtml(visible);
           btn.textContent = "See all";
           return;
@@ -121,6 +122,7 @@ function renderSections(matches: SearchResult["matches"], query: string): void {
           }
           btn.disabled = false;
         }
+        grid.classList.remove("card-row"); // "See all": everything, as a grid
         grid.innerHTML = gridHtml(expandedItems);
         btn.textContent = "Show less";
       });

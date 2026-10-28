@@ -2857,3 +2857,81 @@ body.np-open {
 .queue-sheet.paused .queue-eq i {
   animation-play-state: paused;
 }
+
+/* --- Sideways card rows (Home, search results) ------------------------------ */
+
+.card-grid.card-row {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  padding-bottom: 4px;
+}
+
+.card-grid.card-row::-webkit-scrollbar {
+  display: none;
+}
+
+.card-grid.card-row > .card {
+  flex: 0 0 172px;
+  min-width: 0;
+  scroll-snap-align: start;
+}
+
+@media (max-width: 700px) {
+  .card-grid.card-row {
+    gap: 12px;
+    margin-right: -16px; /* run to the screen edge, hinting there's more */
+    padding-right: 16px;
+  }
+
+  .card-grid.card-row > .card {
+    flex-basis: 136px;
+  }
+}
+
+.card-row-wrap {
+  position: relative;
+}
+
+.row-arrow {
+  display: none;
+  position: absolute;
+  top: 38%;
+  transform: translateY(-50%);
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  background: rgba(10, 0, 25, 0.75);
+  backdrop-filter: blur(8px);
+  color: var(--text);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 2;
+  box-shadow: var(--glass-shadow);
+}
+
+.row-arrow.left {
+  left: -12px;
+}
+
+.row-arrow.right {
+  right: -12px;
+}
+
+@media (hover: hover) {
+  .card-row-wrap:hover .row-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .card-row-wrap.at-start .row-arrow.left,
+  .card-row-wrap.at-end .row-arrow.right {
+    display: none;
+  }
+}

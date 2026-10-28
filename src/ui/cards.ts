@@ -133,7 +133,7 @@ export function sectionMarkup(title: string, items: Item[]): string {
   return `
     <div class="category-section">
       <h2 class="section-title">${escapeHtml(title)}</h2>
-      <div class="card-grid">${items.map((item) => cardMarkup(item, "tracks")).join("")}</div>
+      <div class="card-grid card-row">${items.map((item) => cardMarkup(item, "tracks")).join("")}</div>
     </div>
   `;
 }
@@ -157,4 +157,39 @@ export function artistLinksMarkup(subtitle: string, artistId?: number | null): s
         `<a class="artist-link" href="#" data-artist="${i === 0 && artistId ? artistId : ""}" data-artist-name="${escapeHtml(name)}">${escapeHtml(name)}</a>`,
     )
     .join(", ");
+}
+
+// --- Sideways rows: ‹ › buttons on a laptop (phones just swipe) -------------------
+
+function addRowArrows(row: HTMLElement): void {
+  if (row.dataset.arrows || !row.parentElement) return;
+  row.dataset.arrows = "1";
+  const wrap = document.createElement("div");
+  wrap.className = "card-row-wrap";
+  row.parentElement.insertBefore(wrap, row);
+  wrap.appendChild(row);
+  for (const dir of [-1, 1]) {
+    const btn = document.createElement("button");
+    btn.className = `row-arrow ${dir < 0 ? "left" : "right"}`;
+    btn.setAttribute("aria-label", dir < 0 ? "Scroll left" : "Scroll right");
+    btn.textContent = dir < 0 ? "‹" : "›";
+    btn.addEventListener("click", () => row.scrollBy({ left: dir * row.clientWidth * 0.85, behavior: "smooth" }));
+    wrap.appendChild(btn);
+  }
+  const update = () => {
+    wrap.classList.toggle("at-start", row.scrollLeft < 8);
+    wrap.classList.toggle("at-end", row.scrollLeft + row.clientWidth > row.scrollWidth - 8);
+  };
+  row.addEventListener("scroll", update, { passive: true });
+  new ResizeObserver(update).observe(row);
+  new MutationObserver(update).observe(row, { childList: true });
+  update();
+}
+
+export function initRows(): void {
+  document.querySelectorAll<HTMLElement>(".card-row").forEach(addRowArrows);
+  new MutationObserver(() => document.querySelectorAll<HTMLElement>(".card-row:not([data-arrows])").forEach(addRowArrows)).observe(
+    document.body,
+    { childList: true, subtree: true },
+  );
 }

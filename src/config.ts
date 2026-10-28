@@ -1,8 +1,9 @@
 import { storage } from "./utils";
 
 export const DEBOUNCE_MS = 300;
-export const OVERVIEW_LIMIT = 4;
-export const SEE_ALL_LIMIT = 12;
+/** Songs per row on Home and in search results (rows scroll sideways). */
+export const OVERVIEW_LIMIT = 10;
+export const SEE_ALL_LIMIT = 30;
 export const MIN_QUERY_LENGTH = 1;
 
 /**
