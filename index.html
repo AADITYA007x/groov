@@ -30,6 +30,13 @@
         </div>
         <div id="playlist-nav-list" class="playlist-nav-list"></div>
 
+        <div id="follows-section" style="display: none">
+          <div class="sidebar-header">
+            <span>Artists you follow</span>
+          </div>
+          <div id="follows-list" class="playlist-nav-list"></div>
+        </div>
+
         <div class="sidebar-header">
           <span>Theme</span>
         </div>
@@ -55,6 +62,7 @@
         <button id="youtube-key-btn" class="sidebar-setting"></button>
         <button id="background-play-btn" class="sidebar-setting" style="display: none"></button>
         <button id="autoplay-btn" class="sidebar-setting"></button>
+        <button id="favmix-btn" class="sidebar-setting"></button>
         <button id="crossfade-btn" class="sidebar-setting" style="display: none"></button>
         <button id="storage-btn" class="sidebar-setting" style="display: none"></button>
         <div id="app-version" class="sidebar-version"></div>
@@ -106,6 +114,11 @@
                 <div id="made-for-you" class="mix-row"></div>
               </div>
 
+              <div id="followed-section" class="category-section" style="display: none">
+                <h2 class="section-title">From artists you follow</h2>
+                <div id="followed-grid" class="card-grid card-row"></div>
+              </div>
+
               <div id="recently-played-section" class="category-section" style="display: none">
                 <h2 class="section-title">Recently played</h2>
                 <div id="recently-played-grid" class="card-grid card-row"></div>
@@ -148,6 +161,7 @@
                     <button id="detail-play" class="detail-play">▶ Play</button>
                     <button id="detail-radio" class="text-btn">📻 Radio</button>
                     <button id="detail-save" class="text-btn" style="display: none">+ Save as playlist</button>
+                    <button id="detail-follow" class="follow-btn" style="display: none">+ Follow</button>
                   </div>
                 </div>
               </div>

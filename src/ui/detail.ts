@@ -8,6 +8,7 @@ import { startRadio } from "../player/radio";
 import { bus, trackRegistry } from "../state";
 import { cachedMixSongs, getMix, loadMixSongs } from "../library/mixes";
 import { addTrackToPlaylist, createPlaylist, getPlaylists } from "../library/playlists";
+import { isFollowing, toggleFollow } from "../library/follows";
 import type { Item } from "../types";
 import { $, escapeHtml } from "../utils";
 import { artistLinksMarkup, cardMarkup, trackRowMarkup } from "./cards";
@@ -20,6 +21,19 @@ const body = $("detail-body");
 const playBtn = $<HTMLButtonElement>("detail-play");
 const radioBtn = $<HTMLButtonElement>("detail-radio");
 const saveBtn = $<HTMLButtonElement>("detail-save");
+const followBtn = $<HTMLButtonElement>("detail-follow");
+let currentArtist: { id: number; name: string; artwork: string | null } | null = null;
+
+function renderFollow(): void {
+  if (!currentArtist) {
+    followBtn.style.display = "none";
+    return;
+  }
+  const on = isFollowing(currentArtist.id, currentArtist.name);
+  followBtn.style.display = "inline-flex";
+  followBtn.classList.toggle("following", on);
+  followBtn.textContent = on ? "✓ Following" : "+ Follow";
+}
 let currentMixTitle = "";
 
 let token = 0;
@@ -55,6 +69,8 @@ async function renderArtist(artistId: number, hintName: string, t: number): Prom
   const genre = page.artist.subtitle && page.artist.subtitle !== "Artist" ? page.artist.subtitle.replace(/ artist$/, "") : "";
   setHeader("Artist", page.artist.name, escapeHtml(genre), page.artist.artwork);
   tracks = page.topSongs;
+  currentArtist = { id: artistId, name: page.artist.name, artwork: page.artist.artwork ?? tracks[0]?.artwork ?? null };
+  renderFollow();
   body.innerHTML = `
     ${
       tracks.length
@@ -116,6 +132,8 @@ export function renderDetail(view: string): void {
   const t = ++token;
   const [kind, id, ...rest] = view.split(":");
   saveBtn.style.display = "none";
+  currentArtist = null;
+  renderFollow();
   const job =
     kind === "artist"
       ? renderArtist(Number(id), decodeURIComponent(rest.join(":")), t)
@@ -141,6 +159,10 @@ export function initDetail(): void {
   radioBtn.addEventListener("click", () => {
     if (tracks[0]) void startRadio(tracks[0]);
   });
+  followBtn.addEventListener("click", () => {
+    if (currentArtist) toggleFollow(currentArtist);
+  });
+  bus.on("followchange", renderFollow);
   saveBtn.addEventListener("click", () => {
     if (!tracks.length) return;
     // "Daily Mix 1 · 27 Oct", so saving again tomorrow makes a new one.

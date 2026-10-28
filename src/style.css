@@ -2935,3 +2935,34 @@ body.np-open {
     display: none;
   }
 }
+
+/* --- Follow artists --------------------------------------------------------- */
+
+.follow-btn {
+  border: 1px solid var(--glass-border);
+  background: transparent;
+  color: var(--text);
+  font-weight: 700;
+  font-size: 13px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.follow-btn.following {
+  border-color: var(--accent-2);
+  color: var(--accent-2-bright);
+}
+
+.follow-avatar {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.queue-fav {
+  color: var(--accent-2-bright);
+  font-weight: 600;
+}

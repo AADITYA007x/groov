@@ -8,6 +8,7 @@ import { cachedMixSongs, getMixes, loadMixSongs, warmMixes, type Mix } from "../
 import { getPlaylists } from "../library/playlists";
 import { isShuffleOn, playTrack, setQueue } from "../player/player";
 import { navigateTo } from "./views";
+import { renderFollowedRow } from "./follows-ui";
 import { bus, trackRegistry } from "../state";
 import type { Item } from "../types";
 import { $, escapeHtml } from "../utils";
@@ -172,7 +173,7 @@ export async function renderHomeFeed(): Promise<void> {
   loading = true;
   try {
     renderMadeForYou();
-    await Promise.all([renderTrending(), renderRecommendations()]);
+    await Promise.all([renderTrending(), renderRecommendations(), renderFollowedRow()]);
   } finally {
     loading = false;
   }

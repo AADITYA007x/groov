@@ -15,6 +15,7 @@ import {
 import {
   getAutoplayPreview,
   getRadioSeed,
+  favouriteIds,
   isAutoplayLoading,
   isAutoplayOn,
   playFromAutoplay,
@@ -52,7 +53,7 @@ function rowMarkup(item: Item, attrs: string, cls: string, left: string, right: 
       <div class="queue-art-wrap">${art}</div>
       <div class="queue-info">
         <div class="queue-name">${escapeHtml(item.name)}</div>
-        <div class="queue-artist">${escapeHtml(item.subtitle)}${length}</div>
+        <div class="queue-artist">${favouriteIds.has(item.id) ? `<span class="queue-fav">♥ Your favourite</span> · ` : ""}${escapeHtml(item.subtitle)}${length}</div>
       </div>
       ${right}
     </div>`;

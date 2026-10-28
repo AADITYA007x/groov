@@ -8,13 +8,35 @@ import { hasNativeAudio, nativeAudio } from "../player/native-audio";
 import { getCrossfadeSeconds, setCrossfadeSeconds } from "../player/player";
 import { bus } from "../state";
 import { chooseOption } from "./choice";
-import { isAutoplayOn, setAutoplay } from "../player/radio";
+import { getFavouriteMix, isAutoplayOn, setAutoplay, setFavouriteMix, type FavouriteMix } from "../player/radio";
 
 const keyBtn = $("youtube-key-btn");
 const backgroundBtn = $("background-play-btn");
 const versionEl = $("app-version");
 const crossfadeBtn = $("crossfade-btn");
 const autoplayBtn = $("autoplay-btn");
+const favMixBtn = $("favmix-btn");
+const FAV_LABELS: Record<FavouriteMix, string> = { off: "Off", sometimes: "Sometimes", often: "Often" };
+
+function renderFavMix(): void {
+  favMixBtn.textContent = `Your favourites in radio: ${FAV_LABELS[getFavouriteMix()]}`;
+}
+
+async function chooseFavMix(): Promise<void> {
+  const current = getFavouriteMix();
+  const choice = await chooseOption<FavouriteMix>(
+    "Your favourites in radio",
+    [
+      { label: "Off", value: "off", active: current === "off" },
+      { label: "Sometimes (about 1 in 7 songs)", value: "sometimes", active: current === "sometimes" },
+      { label: "Often (about 1 in 4 songs)", value: "often", active: current === "often" },
+    ],
+    "Mixes your liked songs and songs by artists you follow into radio and autoplay, now and then. Never one you played in the last 3 hours.",
+  );
+  if (choice === null) return;
+  setFavouriteMix(choice);
+  renderFavMix();
+}
 
 function renderAutoplay(): void {
   autoplayBtn.textContent = isAutoplayOn() ? "Autoplay: on (radio when the queue ends)" : "Autoplay: off";
@@ -107,6 +129,8 @@ async function renderBackgroundStatus(): Promise<void> {
 
 export function initSettings(): void {
   renderAutoplay();
+  renderFavMix();
+  favMixBtn.addEventListener("click", () => void chooseFavMix());
   autoplayBtn.addEventListener("click", () => {
     setAutoplay(!isAutoplayOn());
     renderAutoplay();

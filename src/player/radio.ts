@@ -21,6 +21,9 @@ import {
   setQueue,
 } from "./player";
 import { storage } from "../utils";
+import { mainArtist, playsSince, topSongs } from "../library/history";
+import { getLikedPlaylist } from "../library/liked";
+import { cachedFollowedSongs, getFollows } from "../library/follows";
 
 interface RadioTrack {
   videoId: string;
@@ -136,7 +139,7 @@ export async function startRadio(seed?: Item): Promise<void> {
   bus.emit("toast", `📻 Starting radio from "${item.name}"…`);
   let items: Item[];
   try {
-    items = await radioAfter(item);
+    items = mixInFavourites(await radioAfter(item), item.id);
   } catch {
     items = [];
   }
@@ -160,7 +163,7 @@ async function topUp(): Promise<void> {
   if (!last) return;
   fetching = true;
   try {
-    const items = await radioAfter(last);
+    const items = mixInFavourites(await radioAfter(last));
     items.forEach((i) => trackRegistry.set(i.id, i));
     if (getQueueInfo().source === "radio") appendToQueue(items.map((i) => i.id));
   } catch (err) {
@@ -168,6 +171,68 @@ async function topUp(): Promise<void> {
   } finally {
     fetching = false;
   }
+}
+
+// --- Your favourites, now and then --------------------------------------------------
+// Like YouTube Music: every few radio/autoplay songs, one of yours — a liked
+// song or one by an artist you follow. How often is up to you (Settings).
+
+export type FavouriteMix = "off" | "sometimes" | "often";
+const EVERY: Record<FavouriteMix, number> = { off: 0, sometimes: 6, often: 3 };
+
+export function getFavouriteMix(): FavouriteMix {
+  return storage.get<FavouriteMix>("groov:favourite-mix", "sometimes");
+}
+
+export function setFavouriteMix(mix: FavouriteMix): void {
+  storage.set("groov:favourite-mix", mix);
+}
+
+/** Songs that were mixed in as favourites (Up next marks them ♥). */
+export const favouriteIds = new Set<string>();
+const recentlyMixed: string[] = [];
+
+function favouritePool(exclude: Set<string>): Item[] {
+  const followed = getFollows().map((f) => f.name.toLowerCase());
+  const byFollowed = (i: Item) => followed.includes(mainArtist(i.subtitle).toLowerCase());
+  const liked = getLikedPlaylist()?.tracks ?? [];
+  const played = topSongs(0, 300).map((s) => s.item).filter(byFollowed);
+  const pool = [...liked, ...cachedFollowedSongs(), ...played];
+  // Not anything played in the last 3 hours, already queued or just mixed in.
+  const recent = new Set(playsSince(Date.now() - 3 * 3600_000).map((e) => e[0]));
+  const seen = new Set<string>();
+  return pool.filter((i) => {
+    const key = normName(shortTitle(i.name));
+    if (seen.has(key) || exclude.has(i.id) || recent.has(i.id) || recentlyMixed.includes(i.id)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/** Put one of your favourites after every few radio songs. */
+export function mixInFavourites(items: Item[], ...alsoExclude: string[]): Item[] {
+  const every = EVERY[getFavouriteMix()];
+  if (!every || items.length < every) return items;
+  const exclude = new Set([...getUpcoming(), getCurrentTrackId() ?? "", ...alsoExclude, ...items.map((i) => i.id)]);
+  const names = new Set(items.map((i) => normName(shortTitle(i.name))));
+  const pool = favouritePool(exclude)
+    .filter((i) => !names.has(normName(shortTitle(i.name))))
+    .sort(() => Math.random() - 0.5);
+  if (!pool.length) return items;
+  const out: Item[] = [];
+  items.forEach((item, i) => {
+    out.push(item);
+    // Not always on the dot: every `every` songs, give or take one.
+    if ((i + 1) % every === 0 && pool.length && Math.random() > 0.15) {
+      const fav = pool.shift()!;
+      trackRegistry.set(fav.id, fav);
+      favouriteIds.add(fav.id);
+      recentlyMixed.push(fav.id);
+      if (recentlyMixed.length > 30) recentlyMixed.shift();
+      out.push(fav);
+    }
+  });
+  return out;
 }
 
 // --- Surprise me / Shuffle my library ------------------------------------------------
@@ -329,7 +394,7 @@ async function preparePreview(): Promise<void> {
   previewTriedFor = lastId;
   bus.emit("queueupdate", undefined);
   try {
-    const items = await radioForList(seed);
+    const items = mixInFavourites(await radioForList(seed));
     items.forEach((i) => trackRegistry.set(i.id, i));
     preview = { seedId: lastId, seed, items };
     removed.clear();
@@ -368,7 +433,7 @@ async function autoplay(): Promise<boolean> {
     let items = getAutoplayPreview()?.items;
     if (!items?.length) {
       bus.emit("toast", `📻 Autoplay: more like "${item.name}"…`);
-      items = (await radioAfter(item)).filter((i) => i.id !== item.id);
+      items = mixInFavourites((await radioAfter(item)).filter((i) => i.id !== item.id), item.id);
     }
     if (!items.length || getCurrentTrackId() !== item.id) return false;
     items.forEach((i) => trackRegistry.set(i.id, i));

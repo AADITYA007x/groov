@@ -16,6 +16,7 @@ drop function if exists public.unshare_playlist(uuid, uuid) cascade;
 drop table if exists public.play_history cascade;
 drop table if exists public.app_settings cascade;
 drop table if exists public.video_ids cascade;
+drop table if exists public.follows cascade;
 drop table if exists public.playlist_tracks cascade;
 drop table if exists public.playlist_members cascade;
 drop table if exists public.playlists cascade;
@@ -218,3 +219,23 @@ drop policy if exists "change video ids" on public.video_ids;
 create policy "read video ids" on public.video_ids for select to authenticated using (true);
 create policy "add video ids" on public.video_ids for insert to authenticated with check (true);
 create policy "change video ids" on public.video_ids for update to authenticated using (true) with check (true);
+
+-- Followed artists (also in 003_follows.sql) --------------------------------
+create table if not exists public.follows (
+  user_id uuid not null default auth.uid() references public.profiles (id) on delete cascade,
+  artist_key text not null,
+  artist jsonb not null,
+  created_at timestamptz not null default now(),
+  primary key (user_id, artist_key)
+);
+
+alter table public.follows enable row level security;
+
+drop policy if exists "see own follows" on public.follows;
+drop policy if exists "follow" on public.follows;
+drop policy if exists "change own follows" on public.follows;
+drop policy if exists "unfollow" on public.follows;
+create policy "see own follows" on public.follows for select to authenticated using (user_id = auth.uid());
+create policy "follow" on public.follows for insert to authenticated with check (user_id = auth.uid());
+create policy "change own follows" on public.follows for update to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "unfollow" on public.follows for delete to authenticated using (user_id = auth.uid());

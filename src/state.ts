@@ -59,4 +59,6 @@ export const bus = createEmitter<{
   mixchange: void;
   /** The YouTube key arrived from (or was saved to) the account. */
   youtubekeychange: void;
+  /** An artist was followed or unfollowed (or follows synced). */
+  followchange: void;
 }>();
