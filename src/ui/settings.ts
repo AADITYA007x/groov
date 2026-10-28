@@ -71,10 +71,13 @@ function formatSize(bytes: number): string {
   return mb >= 1000 ? `${(mb / 1000).toFixed(1).replace(/\.0$/, "")} GB` : `${Math.round(mb)} MB`;
 }
 
-async function renderStorage(): Promise<{ bytes: number; songs: number; limitMb: number } | null> {
+type StorageInfo = Awaited<ReturnType<typeof nativeAudio.storageInfo>>;
+
+async function renderStorage(): Promise<StorageInfo | null> {
   try {
     const info = await nativeAudio.storageInfo();
-    storageBtn.textContent = `Saved songs: ${info.songs} · ${formatSize(info.bytes)}`;
+    const dl = info.downloadedSongs ? ` · ${info.downloadedSongs} downloaded` : "";
+    storageBtn.textContent = `Saved songs: ${info.songs} · ${formatSize(info.bytes)}${dl}`;
     return info;
   } catch {
     storageBtn.textContent = "Saved songs";
@@ -85,21 +88,30 @@ async function renderStorage(): Promise<{ bytes: number; songs: number; limitMb:
 async function chooseStorage(): Promise<void> {
   const info = await renderStorage();
   const limit = info?.limitMb ?? 800;
-  type Choice = number | "clear";
+  type Choice = number | "clear" | "clear-all";
   const options: { label: string; value: Choice; active?: boolean; danger?: boolean }[] = LIMITS.map((mb) => ({
     label: `Keep up to ${formatSize(mb * 1e6)}`,
     value: mb,
     active: mb === limit,
   }));
-  options.push({ label: "Delete saved songs now", value: "clear", danger: true });
+  const downloaded = info?.downloadedSongs ?? 0;
+  options.push({ label: downloaded ? "Delete saved songs (keep downloads)" : "Delete saved songs now", value: "clear", danger: true });
+  if (downloaded) options.push({ label: `Delete everything, downloads too (${downloaded})`, value: "clear-all", danger: true });
   const note = info
-    ? `${info.songs} songs saved (${formatSize(info.bytes)}). Saved songs play instantly and work offline; the oldest are removed when the limit is reached.`
+    ? `${info.songs} songs saved (${formatSize(info.bytes)}). Saved songs play instantly and work offline; the oldest are removed when the limit is reached.` +
+      (downloaded
+        ? ` ${downloaded} are downloads from playlists (${formatSize(info.downloadedBytes ?? 0)}): kept until you remove the download, and not counted in the limit.`
+        : "")
     : "";
   const choice = await chooseOption<Choice>("Saved songs", options, note);
   if (choice === null) return;
-  if (choice === "clear") {
-    const { deleted } = await nativeAudio.clearCache().catch(() => ({ deleted: 0 }));
+  if (choice === "clear" || choice === "clear-all") {
+    const { deleted } = await nativeAudio.clearCache({ includeDownloads: choice === "clear-all" }).catch(() => ({ deleted: 0 }));
     bus.emit("toast", `Deleted ${deleted} saved songs`);
+    if (choice === "clear-all") {
+      localStorage.removeItem("groov:downloaded-playlists"); // or they'd download again
+      location.reload();
+    }
   } else {
     await nativeAudio.setCacheLimit({ mb: choice }).catch(() => undefined);
     bus.emit("toast", `Keeping up to ${formatSize(choice * 1e6)} of songs`);

@@ -3,6 +3,7 @@
 import { getCachedVideoId } from "../api/youtube";
 import { isTrackPlaying } from "../player/player";
 import { registerTrack } from "../state";
+import { isSongDownloaded } from "../library/downloads";
 import type { Category, Item } from "../types";
 import { escapeHtml, formatTime } from "../utils";
 
@@ -99,7 +100,7 @@ export function trackRowMarkup(item: Item, index: number, showArt = true): strin
       </div>
       <div class="playlist-row-info">
         <div class="playlist-row-name">${escapeHtml(item.name)}</div>
-        <div class="playlist-row-subtitle">${escapeHtml(item.subtitle)}${length ? ` · ${length}` : ""}</div>
+        <div class="playlist-row-subtitle">${isSongDownloaded(item.id) ? `<span class="dl-badge" title="Downloaded">⬇</span>` : ""}${escapeHtml(item.subtitle)}${length ? ` · ${length}` : ""}</div>
       </div>
       <button class="add-overlay row-add" data-id="${escapeHtml(item.id)}" aria-label="More">⋯</button>
     </div>
@@ -120,7 +121,7 @@ export function playlistRowMarkup(playlistId: string, item: Item, addedBy?: stri
       </div>
       <div class="playlist-row-info">
         <div class="playlist-row-name">${escapeHtml(item.name)}</div>
-        <div class="playlist-row-subtitle">${escapeHtml(item.subtitle)}${
+        <div class="playlist-row-subtitle">${isSongDownloaded(item.id) ? `<span class="dl-badge" title="Downloaded">⬇</span>` : ""}${escapeHtml(item.subtitle)}${
           addedBy ? ` · <span class="playlist-row-added-by">added by ${escapeHtml(addedBy)}</span>` : ""
         }</div>
       </div>

@@ -18,9 +18,12 @@ interface NativeAudioPlugin {
   }>;
   crossfade(o: NativeTrack & { seconds: number }): Promise<{ cancelled: boolean; videoId?: string | null }>;
   musicVideo(o: NativeTrack & { audioSec: number }): Promise<{ videoId?: string | null }>;
-  storageInfo(): Promise<{ bytes: number; songs: number; limitMb: number }>;
+  storageInfo(): Promise<{ bytes: number; songs: number; limitMb: number; downloadedBytes?: number; downloadedSongs?: number }>;
+  download(o: { tracks: NativeTrack[] }): Promise<void>;
+  removeDownloads(o: { keys: string[] }): Promise<void>;
+  downloadState(o: { keys: string[] }): Promise<{ downloaded: string[] }>;
   setCacheLimit(o: { mb: number }): Promise<void>;
-  clearCache(): Promise<{ deleted: number }>;
+  clearCache(o?: { includeDownloads?: boolean }): Promise<{ deleted: number }>;
   resume(): Promise<void>;
   pause(): Promise<void>;
   seek(o: { position: number }): Promise<void>;
@@ -32,6 +35,7 @@ interface NativeAudioPlugin {
   ): Promise<PluginListenerHandle>;
   addListener(event: "ended", fn: () => void): Promise<PluginListenerHandle>;
   addListener(event: "error", fn: (e: { message?: string }) => void): Promise<PluginListenerHandle>;
+  addListener(event: "download", fn: (e: { key: string; ok: boolean; error?: string }) => void): Promise<PluginListenerHandle>;
 }
 
 export const nativeAudio = registerPlugin<NativeAudioPlugin>("NativeAudio");

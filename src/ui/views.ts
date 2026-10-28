@@ -9,6 +9,8 @@ import { findArtistId } from "../api/itunes";
 import { renderDetail } from "./detail";
 import { isLikedPlaylist } from "../library/liked";
 import { renderStats } from "./stats";
+import { canDownload, downloadPlaylist, isPlaylistDownloaded, playlistProgress, removePlaylistDownload, retryFailed } from "../library/downloads";
+import { chooseOption } from "./choice";
 
 function renderShuffleToggle(): void {
   const btn = $("shuffle-playlist-btn");
@@ -197,6 +199,27 @@ function renderPlaylistMeta(playlist: Playlist): void {
   $("play-playlist-btn").style.display = hasSongs ? "inline-flex" : "none";
   $("shuffle-playlist-btn").style.display = playlist.tracks.length > 1 ? "inline-flex" : "none";
   deleteBtn.textContent = owner ? "Delete playlist" : "Leave playlist";
+  renderDownloadBtn(playlist);
+}
+
+const downloadBtn = $("download-playlist-btn");
+
+function renderDownloadBtn(playlist: Playlist): void {
+  if (!canDownload || !playlist.tracks.length) {
+    downloadBtn.style.display = "none";
+    return;
+  }
+  downloadBtn.style.display = "inline-flex";
+  const on = isPlaylistDownloaded(playlist.id);
+  const { done, total, failed } = playlistProgress(playlist);
+  downloadBtn.classList.toggle("active", on);
+  downloadBtn.textContent = !on
+    ? "⬇ Download"
+    : done >= total
+      ? "✓ Downloaded"
+      : failed && done + failed >= total
+        ? `⬇ ${done}/${total} · retry`
+        : `⬇ ${done}/${total}…`;
 }
 
 export function navigateToPlaylist(id: string, record = true): void {
@@ -240,6 +263,35 @@ export function initViews(): void {
   navSearchBtn.addEventListener("click", () => {
     navigateToSearch();
     closeSidebar();
+  });
+  downloadBtn.addEventListener("click", async () => {
+    const playlist = getPlaylists()[currentView];
+    if (!playlist) return;
+    if (!isPlaylistDownloaded(playlist.id)) {
+      downloadPlaylist(playlist.id);
+      bus.emit("toast", `⬇ Downloading ${playlist.tracks.length} songs for offline`);
+      return;
+    }
+    const { done, total, failed } = playlistProgress(playlist);
+    if (failed && done + failed >= total) {
+      retryFailed();
+      return;
+    }
+    const remove = await chooseOption("Remove download?", [
+      { label: "Remove download (songs may be deleted to make room)", value: true, danger: true },
+      { label: "Keep it", value: false },
+    ]);
+    if (remove) {
+      removePlaylistDownload(playlist.id);
+      bus.emit("toast", "Download removed");
+    }
+  });
+  bus.on("downloadchange", () => {
+    const playlist = getPlaylists()[currentView];
+    if (playlist && playlistViewEl.style.display !== "none") {
+      renderDownloadBtn(playlist);
+      renderPlaylistView(playlist.id);
+    }
   });
   navStatsBtn.addEventListener("click", () => {
     navigateToStats();
