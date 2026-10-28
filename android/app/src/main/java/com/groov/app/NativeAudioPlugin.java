@@ -39,6 +39,8 @@ public class NativeAudioPlugin extends Plugin {
     private final ExecutorService loader = Executors.newSingleThreadExecutor();
     /** Next song in the queue, downloaded in the background. */
     private final ExecutorService prefetcher = Executors.newSingleThreadExecutor();
+    /** Downloads for offline, one at a time, so playing stays quick. */
+    private final ExecutorService downloader = Executors.newSingleThreadExecutor();
     /** Radio look-ups, so they never wait behind a download. */
     private final ExecutorService radioWorker = Executors.newSingleThreadExecutor();
     private final AtomicInteger playToken = new AtomicInteger();
@@ -315,12 +317,71 @@ public class NativeAudioPlugin extends Plugin {
         });
     }
 
+    /**
+     * Keep songs for offline: [{key, title, artist, durationMs}]. Downloads
+     * one by one in the background; a "download" event {key, ok, error} for each.
+     */
+    @PluginMethod
+    public void download(PluginCall call) {
+        JSArray tracks = call.getArray("tracks");
+        call.resolve();
+        if (tracks == null) return;
+        for (int i = 0; i < tracks.length(); i++) {
+            org.json.JSONObject o = tracks.optJSONObject(i);
+            if (o == null) continue;
+            YouTubeAudio.Track track = new YouTubeAudio.Track(
+                o.optString("key", ""), o.optString("title", ""), o.optString("artist", ""), o.optLong("durationMs", 0));
+            if (track.key.isEmpty()) continue;
+            downloader.execute(() -> {
+                JSObject event = new JSObject();
+                event.put("key", track.key);
+                try {
+                    youtube.pin(track);
+                    event.put("ok", true);
+                } catch (Exception e) {
+                    Log.i(TAG, "Download failed for " + track.title + ": " + YouTubeAudio.describe(e));
+                    event.put("ok", false);
+                    event.put("error", YouTubeAudio.describe(e));
+                }
+                notifyListeners("download", event);
+            });
+        }
+    }
+
+    /** Stop keeping songs for offline: {keys: [...]}. */
+    @PluginMethod
+    public void removeDownloads(PluginCall call) {
+        JSArray keys = call.getArray("keys");
+        if (keys != null) for (int i = 0; i < keys.length(); i++) youtube.unpin(keys.optString(i, ""));
+        call.resolve();
+    }
+
+    /** Which of these songs are downloaded: {keys} → {downloaded: [...]}. */
+    @PluginMethod
+    public void downloadState(PluginCall call) {
+        JSArray keys = call.getArray("keys");
+        prefetcher.execute(() -> {
+            JSArray done = new JSArray();
+            if (keys != null) {
+                for (int i = 0; i < keys.length(); i++) {
+                    String k = keys.optString(i, "");
+                    if (!k.isEmpty() && youtube.isDownloaded(k)) done.put(k);
+                }
+            }
+            JSObject result = new JSObject();
+            result.put("downloaded", done);
+            call.resolve(result);
+        });
+    }
+
     @PluginMethod
     public void storageInfo(PluginCall call) {
         long[] stats = youtube.cacheStats();
         JSObject result = new JSObject();
         result.put("bytes", stats[0]);
         result.put("songs", stats[1]);
+        result.put("downloadedBytes", stats[2]);
+        result.put("downloadedSongs", stats[3]);
         result.put("limitMb", youtube.cacheLimitMb());
         call.resolve(result);
     }
@@ -336,9 +397,10 @@ public class NativeAudioPlugin extends Plugin {
     @PluginMethod
     public void clearCache(PluginCall call) {
         final File keep = currentFile;
+        boolean all = Boolean.TRUE.equals(call.getBoolean("includeDownloads", false));
         prefetcher.execute(() -> {
             JSObject result = new JSObject();
-            result.put("deleted", youtube.clearCache(keep));
+            result.put("deleted", youtube.clearCache(keep, all));
             call.resolve(result);
         });
     }

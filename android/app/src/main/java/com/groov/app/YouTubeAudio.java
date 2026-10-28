@@ -12,6 +12,8 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -187,24 +189,75 @@ final class YouTubeAudio {
     }
 
     /** {bytes used, number of songs}. */
+    /** {bytes, songs, downloaded bytes, downloaded songs}. */
     long[] cacheStats() {
         File[] files = cacheDir.listFiles((dir, name) -> !name.endsWith(".part"));
-        long bytes = 0;
-        if (files != null) for (File f : files) bytes += f.length();
-        return new long[] { bytes, files == null ? 0 : files.length };
+        Set<String> pinned = pinnedIds();
+        long bytes = 0, pinnedBytes = 0, pinnedSongs = 0;
+        if (files != null) {
+            for (File f : files) {
+                bytes += f.length();
+                if (pinned.contains(videoIdOf(f))) {
+                    pinnedBytes += f.length();
+                    pinnedSongs++;
+                }
+            }
+        }
+        return new long[] { bytes, files == null ? 0 : files.length, pinnedBytes, pinnedSongs };
     }
 
-    /** Delete every saved song except the one playing. Returns how many. */
-    int clearCache(File keep) {
+    /** Delete saved songs except the one playing (and downloads, unless asked). */
+    int clearCache(File keep, boolean includeDownloads) {
         File[] files = cacheDir.listFiles();
+        Set<String> pinned = includeDownloads ? new HashSet<>() : pinnedIds();
         int deleted = 0;
         if (files != null) {
             for (File f : files) {
-                if (f.equals(keep)) continue;
+                if (f.equals(keep) || pinned.contains(videoIdOf(f))) continue;
                 if (f.delete()) deleted++;
             }
         }
+        if (includeDownloads) ids.edit().remove(PINNED).apply();
         return deleted;
+    }
+
+    // --- Downloads: songs kept for offline, never removed to make room ----------
+
+    private static final String PINNED = "pinned";
+
+    private static String videoIdOf(File f) {
+        String name = f.getName();
+        int dot = name.indexOf('.');
+        return dot > 0 ? name.substring(0, dot) : name;
+    }
+
+    synchronized Set<String> pinnedIds() {
+        return new HashSet<>(ids.getStringSet(PINNED, new HashSet<>()));
+    }
+
+    /** Download (if needed) and keep a song. */
+    void pin(Track track) throws Exception {
+        fetch(track);
+        String videoId = knownVideoId(track.key);
+        if (videoId == null) return;
+        synchronized (this) {
+            Set<String> set = pinnedIds();
+            set.add(videoId);
+            ids.edit().putStringSet(PINNED, set).apply();
+        }
+    }
+
+    /** Stop keeping a song (it stays saved until room is needed). */
+    synchronized void unpin(String key) {
+        String videoId = knownVideoId(key);
+        if (videoId == null) return;
+        Set<String> set = pinnedIds();
+        if (set.remove(videoId)) ids.edit().putStringSet(PINNED, set).apply();
+    }
+
+    boolean isDownloaded(String key) {
+        String videoId = knownVideoId(key);
+        return videoId != null && pinnedIds().contains(videoId) && findCached(videoId) != null;
     }
 
     // --- Search ------------------------------------------------------------------
@@ -420,12 +473,15 @@ final class YouTubeAudio {
         if (files == null) return;
         long total = 0;
         for (File f : files) total += f.length();
+        // Downloads don't count towards the limit and are never removed.
+        Set<String> pinned = pinnedIds();
+        for (File f : files) if (pinned.contains(videoIdOf(f))) total -= f.length();
         long limit = cacheLimitMb() * 1024L * 1024L;
         if (total <= limit) return;
         Arrays.sort(files, (a, b) -> Long.compare(a.lastModified(), b.lastModified()));
         for (File f : files) {
             if (total <= limit) break;
-            if (f.equals(keep)) continue;
+            if (f.equals(keep) || pinned.contains(videoIdOf(f))) continue;
             total -= f.length();
             if (!f.delete()) Log.w(TAG, "Could not delete " + f);
         }
