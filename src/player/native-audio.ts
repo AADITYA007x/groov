@@ -29,7 +29,8 @@ interface NativeAudioPlugin {
   }>;
   eqInfo(): Promise<{ available: boolean; presets: string[]; preset: number; bass: number; bassAvailable: boolean }>;
   setEq(o: { preset?: number; bass?: number }): Promise<void>;
-  storageInfo(): Promise<{ bytes: number; songs: number; limitMb: number; downloadedBytes?: number; downloadedSongs?: number }>;
+  storageInfo(): Promise<{ bytes: number; songs: number; limitMb: number; downloadedBytes?: number; downloadedSongs?: number; smartBytes?: number; smartSongs?: number }>;
+  smartDownload(o: { tracks: NativeTrack[]; limitMb: number; wifiOnly: boolean }): Promise<void>;
   download(o: { tracks: NativeTrack[] }): Promise<void>;
   removeDownloads(o: { keys: string[] }): Promise<void>;
   downloadState(o: { keys: string[] }): Promise<{ downloaded: string[] }>;
@@ -46,6 +47,7 @@ interface NativeAudioPlugin {
   ): Promise<PluginListenerHandle>;
   addListener(event: "ended", fn: () => void): Promise<PluginListenerHandle>;
   addListener(event: "error", fn: (e: { message?: string }) => void): Promise<PluginListenerHandle>;
+  addListener(event: "smartdone", fn: (e: { kept: number }) => void): Promise<PluginListenerHandle>;
   addListener(event: "download", fn: (e: { key: string; ok: boolean; error?: string; videoId?: string | null }) => void): Promise<PluginListenerHandle>;
 }
 

@@ -8,6 +8,7 @@ import { hasNativeAudio, nativeAudio } from "../player/native-audio";
 import { getCrossfadeSeconds, setCrossfadeSeconds } from "../player/player";
 import { bus } from "../state";
 import { chooseOption } from "./choice";
+import { getSmartMode, setSmartMode, SMART_LIMIT_MB, type SmartMode } from "../library/smart";
 import { getFavouriteMix, isAutoplayOn, setAutoplay, setFavouriteMix, type FavouriteMix } from "../player/radio";
 
 const keyBtn = $("youtube-key-btn");
@@ -129,6 +130,38 @@ async function chooseBass(): Promise<void> {
   void renderEq();
 }
 
+// --- Smart downloads (Android) -------------------------------------------------------
+
+const smartBtn = $("smart-btn");
+const SMART_LABELS: Record<SmartMode, string> = { off: "Off", mixes: "Mixes", "mixes-liked": "Mixes + Liked Songs" };
+
+function renderSmart(): void {
+  smartBtn.textContent = `Smart downloads: ${SMART_LABELS[getSmartMode()]}${getSmartMode() === "off" ? "" : " (Wi-Fi)"}`;
+}
+
+async function chooseSmart(): Promise<void> {
+  const current = getSmartMode();
+  const choice = await chooseOption<SmartMode>(
+    "Smart downloads",
+    [
+      { label: "Off", value: "off", active: current === "off" },
+      { label: "Mixes: On Repeat + Daily Mixes", value: "mixes", active: current === "mixes" },
+      { label: "Mixes + Liked Songs", value: "mixes-liked", active: current === "mixes-liked" },
+    ],
+    `Keeps these offline automatically, refreshed daily on Wi-Fi only. Up to ${SMART_LIMIT_MB} MB, separate from your own downloads.`,
+    `<b>How it works</b>
+     <ul>
+       <li>Once a day, on Wi-Fi, Groov downloads today's On Repeat and Daily Mixes (and Liked Songs if you pick it).</li>
+       <li>Never on mobile data.</li>
+       <li>Your own downloads always come first: if the phone runs low on space, smart downloads are removed before them — yours are never touched.</li>
+     </ul>`,
+  );
+  if (choice === null) return;
+  setSmartMode(choice);
+  renderSmart();
+  bus.emit("toast", choice === "off" ? "Smart downloads off" : "Smart downloads on — next time you're on Wi-Fi");
+}
+
 // --- Saved songs (Android cache) -----------------------------------------------------
 
 const LIMITS = [300, 800, 1500, 3000];
@@ -143,7 +176,8 @@ type StorageInfo = Awaited<ReturnType<typeof nativeAudio.storageInfo>>;
 async function renderStorage(): Promise<StorageInfo | null> {
   try {
     const info = await nativeAudio.storageInfo();
-    const dl = info.downloadedSongs ? ` · ${info.downloadedSongs} downloaded` : "";
+    const dl =
+      (info.downloadedSongs ? ` · ${info.downloadedSongs} yours` : "") + (info.smartSongs ? ` · ${info.smartSongs} smart` : "");
     storageBtn.textContent = `Saved songs: ${info.songs} · ${formatSize(info.bytes)}${dl}`;
     return info;
   } catch {
@@ -167,8 +201,9 @@ async function chooseStorage(): Promise<void> {
   const note = info
     ? `${info.songs} songs saved (${formatSize(info.bytes)}). Saved songs play instantly and work offline; the oldest are removed when the limit is reached.` +
       (downloaded
-        ? ` ${downloaded} are downloads from playlists (${formatSize(info.downloadedBytes ?? 0)}): kept until you remove the download, and not counted in the limit.`
-        : "")
+        ? ` ${downloaded} are your downloads (${formatSize(info.downloadedBytes ?? 0)}): kept until you remove them, not counted in the limit.`
+        : "") +
+      (info.smartSongs ? ` ${info.smartSongs} are smart downloads (${formatSize(info.smartBytes ?? 0)}).` : "")
     : "";
   const choice = await chooseOption<Choice>("Saved songs", options, note);
   if (choice === null) return;
@@ -240,6 +275,9 @@ export function initSettings(): void {
     void renderStorage();
     crossfadeBtn.addEventListener("click", () => void chooseCrossfade());
     void renderEq();
+    smartBtn.style.display = "block";
+    renderSmart();
+    smartBtn.addEventListener("click", () => void chooseSmart());
     eqBtn.addEventListener("click", () => void chooseEq());
     bassBtn.addEventListener("click", () => void chooseBass());
     storageBtn.addEventListener("click", () => void chooseStorage());
