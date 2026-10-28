@@ -54,6 +54,7 @@
         </div>
         <button id="youtube-key-btn" class="sidebar-setting"></button>
         <button id="background-play-btn" class="sidebar-setting" style="display: none"></button>
+        <button id="autoplay-btn" class="sidebar-setting"></button>
         <button id="crossfade-btn" class="sidebar-setting" style="display: none"></button>
         <button id="storage-btn" class="sidebar-setting" style="display: none"></button>
         <div id="app-version" class="sidebar-version"></div>
@@ -298,9 +299,9 @@
         </div>
         <div id="lyrics-body" class="lyrics-body"></div>
         <div id="lyrics-timing" class="lyrics-timing" style="display: none">
-          <button id="lyrics-earlier" class="np-pill" aria-label="Show lyrics earlier">− Earlier</button>
-          <button id="lyrics-timing-value" class="lyrics-timing-value" title="Reset">In sync</button>
-          <button id="lyrics-later" class="np-pill" aria-label="Show lyrics later">Later +</button>
+          <button id="lyrics-earlier" class="np-pill lyrics-nudge" aria-label="Lyrics earlier by half a second">−0.5s</button>
+          <button id="lyrics-timing-value" class="lyrics-timing-value" title="Reset">Tap the line being sung</button>
+          <button id="lyrics-later" class="np-pill lyrics-nudge" aria-label="Lyrics later by half a second">+0.5s</button>
         </div>
       </div>
     </div>

@@ -8,11 +8,17 @@ import { hasNativeAudio, nativeAudio } from "../player/native-audio";
 import { getCrossfadeSeconds, setCrossfadeSeconds } from "../player/player";
 import { bus } from "../state";
 import { chooseOption } from "./choice";
+import { isAutoplayOn, setAutoplay } from "../player/radio";
 
 const keyBtn = $("youtube-key-btn");
 const backgroundBtn = $("background-play-btn");
 const versionEl = $("app-version");
 const crossfadeBtn = $("crossfade-btn");
+const autoplayBtn = $("autoplay-btn");
+
+function renderAutoplay(): void {
+  autoplayBtn.textContent = isAutoplayOn() ? "Autoplay: on (radio when the queue ends)" : "Autoplay: off";
+}
 const storageBtn = $("storage-btn");
 
 // --- Crossfade (Android) ---------------------------------------------------------
@@ -100,6 +106,12 @@ async function renderBackgroundStatus(): Promise<void> {
 }
 
 export function initSettings(): void {
+  renderAutoplay();
+  autoplayBtn.addEventListener("click", () => {
+    setAutoplay(!isAutoplayOn());
+    renderAutoplay();
+    bus.emit("toast", isAutoplayOn() ? "📻 Autoplay on" : "Autoplay off");
+  });
   versionEl.textContent = `Groov v${__APP_VERSION__}`;
   renderKeyStatus();
   keyBtn.addEventListener("click", () => {

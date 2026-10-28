@@ -470,8 +470,20 @@ async function playQueueIndex(index: number): Promise<void> {
   await playTrack(id);
 }
 
+// Autoplay: with nothing left to play, keep going with radio (radio.ts).
+let autoplayHandler: (() => Promise<boolean>) | null = null;
+
+export function setAutoplayHandler(fn: () => Promise<boolean>): void {
+  autoplayHandler = fn;
+}
+
 async function playNextInQueue(): Promise<void> {
-  if (!hasNext()) return;
+  if (!hasNext()) {
+    if (repeatMode === "off" && !skipInterceptor && autoplayHandler && (await autoplayHandler())) {
+      if (hasNext()) await playQueueIndex(currentQueueIndex + 1);
+    }
+    return;
+  }
   if (currentQueueIndex >= currentQueue.length - 1) {
     // Repeat all: start over (in a new random order if shuffling).
     if (shuffleOn) currentQueue = shuffled(originalQueue);

@@ -9,7 +9,16 @@ import { getPlaylists } from "../library/playlists";
 import { bus, trackRegistry } from "../state";
 import type { Item } from "../types";
 import { hasNativeAudio, nativeAudio } from "./native-audio";
-import { appendToQueue, getCurrentTrackId, getQueueInfo, isShuffleOn, playTrack, setQueue } from "./player";
+import {
+  appendToQueue,
+  getCurrentTrackId,
+  getQueueInfo,
+  isShuffleOn,
+  playTrack,
+  setAutoplayHandler,
+  setQueue,
+} from "./player";
+import { storage } from "../utils";
 
 interface RadioTrack {
   videoId: string;
@@ -209,6 +218,42 @@ export async function playPlaylist(playlistId: string): Promise<void> {
   await playTrack(start.id);
 }
 
+// --- Autoplay -----------------------------------------------------------------------
+// The last song ended (or you pressed Next on it): keep the music going with
+// radio from that song, like Spotify. Off in Settings, or with Repeat on.
+
+export function isAutoplayOn(): boolean {
+  return storage.get<boolean>("groov:autoplay", true);
+}
+
+export function setAutoplay(on: boolean): void {
+  storage.set("groov:autoplay", on);
+}
+
+let autoplaying = false;
+
+async function autoplay(): Promise<boolean> {
+  const current = getCurrentTrackId();
+  const item = current ? trackRegistry.get(current) : undefined;
+  if (!isAutoplayOn() || !item || autoplaying) return false;
+  autoplaying = true;
+  bus.emit("toast", `📻 Autoplay: more like "${item.name}"…`);
+  try {
+    const items = (await radioAfter(item)).filter((i) => i.id !== item.id);
+    if (!items.length || getCurrentTrackId() !== item.id) return false;
+    items.forEach((i) => trackRegistry.set(i.id, i));
+    seedName = item.name;
+    setQueue([item.id, ...items.map((i) => i.id)], item.id, "radio");
+    return true;
+  } catch {
+    bus.emit("toast", "Nothing more to play");
+    return false;
+  } finally {
+    autoplaying = false;
+  }
+}
+
 export function initRadio(): void {
   bus.on("trackchange", () => void topUp());
+  setAutoplayHandler(autoplay);
 }

@@ -19,7 +19,7 @@ function renderShuffleToggle(): void {
 }
 import type { Playlist } from "../types";
 import { bus } from "../state";
-import { $ } from "../utils";
+import { $, escapeHtml } from "../utils";
 import { playlistRowMarkup } from "./cards";
 import { renderHomeFeed } from "./home";
 import { closeSidebar } from "./layout";
@@ -145,9 +145,9 @@ export function renderPlaylistNav(): void {
     const btn = document.createElement("button");
     btn.className = `playlist-nav-item${currentView === id ? " active" : ""}${liked ? " liked" : ""}`;
     btn.dataset.id = id;
-    btn.textContent = liked
-      ? `❤️ ${playlists[id].name} · ${playlists[id].tracks.length}`
-      : (playlists[id].shared ? "👥 " : "") + playlists[id].name;
+    const p = playlists[id];
+    const icon = liked ? "❤️" : p.shared ? "👥" : "♪";
+    btn.innerHTML = `<span class="playlist-nav-icon">${icon}</span><span class="playlist-nav-name">${escapeHtml(p.name)}</span><span class="playlist-nav-count">${p.tracks.length}</span>`;
     btn.addEventListener("click", () => {
       navigateToPlaylist(id);
       closeSidebar();

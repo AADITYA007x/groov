@@ -24,7 +24,8 @@ let offset = 0;
 
 function setOffset(value: number): void {
   const id = getCurrentTrackId();
-  offset = Math.round(value * 2) / 2;
+  // Round down: the tapped line must count as already started.
+  offset = Math.floor(value * 10 + 1e-6) / 10;
   if (id) {
     if (offset) offsets[id] = offset;
     else delete offsets[id];
@@ -37,7 +38,7 @@ function setOffset(value: number): void {
 
 function renderTiming(): void {
   timingEl.style.display = currentLyrics?.synced ? "flex" : "none";
-  timingValue.textContent = offset ? `${offset > 0 ? "+" : ""}${offset.toFixed(1)}s` : "In sync";
+  timingValue.textContent = offset ? `${offset > 0 ? "+" : ""}${offset.toFixed(1)}s · reset` : "Tap the line being sung";
 }
 
 let currentLyrics: Lyrics | null = null;
@@ -113,7 +114,17 @@ export function initLyrics(): void {
   closeBtn.addEventListener("click", close);
   $("lyrics-earlier").addEventListener("click", () => setOffset(offset - 0.5));
   $("lyrics-later").addEventListener("click", () => setOffset(offset + 0.5));
-  timingValue.addEventListener("click", () => setOffset(0));
+  timingValue.addEventListener("click", () => offset && setOffset(0));
+  // Out of sync? Tap the line that's being sung right now: it lines up.
+  body.addEventListener("click", (e) => {
+    const line = (e.target as Element).closest<HTMLElement>(".lyrics-line");
+    const synced = currentLyrics?.synced;
+    if (!line || !synced) return;
+    const lineTime = synced[Number(line.dataset.index)]?.time;
+    if (lineTime === undefined) return;
+    setOffset(getPosition() - lineTime);
+    bus.emit("toast", offset ? `Lyrics synced (${offset > 0 ? "+" : ""}${offset.toFixed(1)}s)` : "Lyrics in sync");
+  });
   bus.on("trackchange", (item) => {
     currentLyrics = null;
     activeLineIndex = -1;
