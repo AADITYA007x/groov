@@ -190,6 +190,9 @@ function initNativeEngine(): void {
     if (duration > 0 && duration !== nativeDuration) {
       nativeDuration = duration;
       bus.emit("durationchange", duration);
+      // Find the music video in the background, so "Show video" is instant.
+      const item = currentTrackId ? trackRegistry.get(currentTrackId) : undefined;
+      if (item) setTimeout(() => currentTrackId === item.id && void findMusicVideo(item), 4000);
     }
     emitProgress();
     maybeCrossfade();
@@ -717,9 +720,34 @@ function continueHandover(player: YT.Player): void {
   onPlaybackStarted();
 }
 
+// The song's real music video (the audio upload is usually a still picture).
+// Looked up natively, once per song, in the background while it plays.
+const musicVideos = new Map<string, Promise<string | null>>();
+
+function findMusicVideo(item: Item): Promise<string | null> {
+  let job = musicVideos.get(item.id);
+  if (!job) {
+    job = nativeAudio
+      .musicVideo({ ...toNativeTrack(item), audioSec: nativeDuration })
+      .then((r) => r.videoId || null)
+      .catch(() => null);
+    musicVideos.set(item.id, job);
+  }
+  return job;
+}
+
+/** The video to show for the native song: the music video if there's one. */
+async function videoForNative(item: Item | undefined): Promise<string | null> {
+  if (!item) return nativeVideoId;
+  const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000));
+  return (await Promise.race([findMusicVideo(item), timeout])) || nativeVideoId;
+}
+
 export async function startVideo(): Promise<void> {
   if (activeEngine !== "native" || !nativeVideoId || !currentTrackId) return;
   const id = currentTrackId;
+  const videoId = await videoForNative(trackRegistry.get(id));
+  if (currentTrackId !== id || activeEngine !== "native" || !videoId) return;
   const position = getPosition();
   const wasPlaying = nativePlaying;
   const player = await getYoutubePlayer();
@@ -737,7 +765,7 @@ export async function startVideo(): Promise<void> {
         bus.emit("videounavailable", undefined);
       }, 12000),
     };
-    player.loadVideoById(nativeVideoId, position + 0.5);
+    player.loadVideoById(videoId, getPosition() + 0.5);
     return;
   }
 
@@ -746,7 +774,7 @@ export async function startVideo(): Promise<void> {
   videoFromNative = true;
   nativePlaying = false;
   void nativeAudio.pause().catch(() => undefined);
-  player.loadVideoById(nativeVideoId, position);
+  player.loadVideoById(videoId, position);
   if (!wasPlaying) setTimeout(() => player.pauseVideo(), 300);
   startProgressPolling();
 }

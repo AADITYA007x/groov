@@ -30,6 +30,7 @@ import { openAddToPlaylist } from "./popover";
 import { createSeekBar, type SeekBar } from "./seekbar";
 import { pushStep, removeStep } from "./back";
 import { openArtist } from "./views";
+import { artistLinksMarkup } from "./cards";
 import { isLiked, toggleLike } from "../library/liked";
 
 const bar = $("player-bar");
@@ -76,7 +77,7 @@ function renderTrack(item: Item): void {
   npArt.src = large;
   npArt.classList.toggle("empty", !large);
   npTitle.textContent = item.name;
-  npArtist.textContent = item.subtitle;
+  npArtist.innerHTML = artistLinksMarkup(item.subtitle, item.artistId);
   npBg.style.backgroundImage = large ? `url("${large}")` : "";
   updateBackgroundArt(item.artwork);
 }
@@ -238,12 +239,15 @@ export function initNowPlaying(): void {
   bus.on("trackchange", () => setTimeout(renderLike, 0));
   bus.on("likechange", renderLike);
   bus.on("playlistschange", renderLike);
-  // Tap the artist name to open their page.
+  // Tap an artist's name to open their page (each artist separately).
   npArtist.classList.add("link");
-  npArtist.addEventListener("click", () => {
-    if (!currentItem) return;
+  npArtist.addEventListener("click", (e) => {
+    const link = (e.target as Element).closest<HTMLElement>(".artist-link");
+    if (!link) return;
+    e.preventDefault();
+    e.stopPropagation(); // not the document-wide artist handler too
     close();
-    void openArtist(currentItem.artistId, currentItem.subtitle);
+    void openArtist(Number(link.dataset.artist) || null, link.dataset.artistName ?? "");
   });
   $("np-shuffle").addEventListener("click", () => {
     toggleShuffle();

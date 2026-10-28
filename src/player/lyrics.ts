@@ -3,8 +3,8 @@
 import { fetchLyrics } from "../api/lyrics";
 import { bus, trackRegistry } from "../state";
 import type { Item, Lyrics } from "../types";
-import { $, escapeHtml } from "../utils";
-import { getCurrentTrackId } from "./player";
+import { $, escapeHtml, storage } from "../utils";
+import { getCurrentTrackId, getDuration, getPosition } from "./player";
 import { pushStep, removeStep } from "../ui/back";
 
 const toggleBtn = $("lyrics-toggle-btn");
@@ -13,6 +13,32 @@ const closeBtn = $("lyrics-close");
 const trackName = $("lyrics-track-name");
 const trackArtist = $("lyrics-track-artist");
 const body = $("lyrics-body");
+const timingEl = $("lyrics-timing");
+const timingValue = $("lyrics-timing-value");
+
+// "Lyrics a bit early/late?" nudge, remembered per song.
+// Positive = lyrics show later.
+const OFFSETS_KEY = "groov:lyrics-offsets";
+const offsets = storage.get<Record<string, number>>(OFFSETS_KEY, {});
+let offset = 0;
+
+function setOffset(value: number): void {
+  const id = getCurrentTrackId();
+  offset = Math.round(value * 2) / 2;
+  if (id) {
+    if (offset) offsets[id] = offset;
+    else delete offsets[id];
+    storage.set(OFFSETS_KEY, offsets);
+  }
+  renderTiming();
+  activeLineIndex = -2; // force a redraw
+  highlight(getPosition());
+}
+
+function renderTiming(): void {
+  timingEl.style.display = currentLyrics?.synced ? "flex" : "none";
+  timingValue.textContent = offset ? `${offset > 0 ? "+" : ""}${offset.toFixed(1)}s` : "In sync";
+}
 
 let currentLyrics: Lyrics | null = null;
 let activeLineIndex = -1;
@@ -39,11 +65,15 @@ async function load(item: Item): Promise<void> {
   body.innerHTML = `<p class="lyrics-empty">Loading lyrics…</p>`;
   currentLyrics = null;
   activeLineIndex = -1;
+  offset = offsets[item.id] ?? 0;
+  renderTiming();
 
-  const lyrics = await fetchLyrics(item);
+  const lyrics = await fetchLyrics(item, getDuration());
   if (getCurrentTrackId() !== item.id || !isOpen()) return;
   currentLyrics = lyrics;
   render();
+  renderTiming();
+  highlight(getPosition());
 }
 
 export function openLyrics(): void {
@@ -64,7 +94,7 @@ function highlight(currentTime: number): void {
   if (!currentLyrics?.synced || !isOpen()) return;
   let newIndex = -1;
   for (let i = 0; i < currentLyrics.synced.length; i++) {
-    if (currentLyrics.synced[i].time <= currentTime) newIndex = i;
+    if (currentLyrics.synced[i].time + offset <= currentTime) newIndex = i;
     else break;
   }
   if (newIndex === activeLineIndex) return;
@@ -81,6 +111,9 @@ function highlight(currentTime: number): void {
 export function initLyrics(): void {
   toggleBtn.addEventListener("click", openLyrics);
   closeBtn.addEventListener("click", close);
+  $("lyrics-earlier").addEventListener("click", () => setOffset(offset - 0.5));
+  $("lyrics-later").addEventListener("click", () => setOffset(offset + 0.5));
+  timingValue.addEventListener("click", () => setOffset(0));
   bus.on("trackchange", (item) => {
     currentLyrics = null;
     activeLineIndex = -1;

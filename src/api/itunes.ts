@@ -247,7 +247,10 @@ export async function fetchAlbumPage(collectionId: number): Promise<AlbumPage> {
 /** Find an artist by name (for songs that came without an artist id). */
 export async function findArtistId(name: string): Promise<number | null> {
   const artists = await fetchCategory(name, "artists", 5).catch(() => [] as Item[]);
-  const exact = artists.find((a) => a.name.toLowerCase() === name.toLowerCase());
+  const lower = name.toLowerCase();
+  const exact =
+    artists.find((a) => a.name.toLowerCase() === lower) ??
+    artists.find((a) => a.name.toLowerCase().startsWith(lower));
   return (exact ?? artists[0])?.artistId ?? null;
 }
 

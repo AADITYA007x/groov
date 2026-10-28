@@ -17,6 +17,7 @@ interface NativeAudioPlugin {
     tracks: { videoId: string; title: string; artist: string; durationSec: number; artwork: string | null }[];
   }>;
   crossfade(o: NativeTrack & { seconds: number }): Promise<{ cancelled: boolean; videoId?: string | null }>;
+  musicVideo(o: NativeTrack & { audioSec: number }): Promise<{ videoId?: string | null }>;
   storageInfo(): Promise<{ bytes: number; songs: number; limitMb: number }>;
   setCacheLimit(o: { mb: number }): Promise<void>;
   clearCache(): Promise<{ deleted: number }>;

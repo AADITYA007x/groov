@@ -297,6 +297,24 @@ public class NativeAudioPlugin extends Plugin {
         });
     }
 
+    /** {videoId: the song's real music video, or null}. Searches YouTube Music once per song. */
+    @PluginMethod
+    public void musicVideo(PluginCall call) {
+        YouTubeAudio.Track track = trackFrom(call);
+        Double secs = call.getDouble("audioSec", 0.0);
+        long audioSec = Math.round(secs == null ? 0 : secs);
+        radioWorker.execute(() -> {
+            JSObject result = new JSObject();
+            try {
+                result.put("videoId", youtube.findMusicVideo(track, audioSec));
+            } catch (Exception e) {
+                Log.i(TAG, "Music video search failed: " + YouTubeAudio.describe(e));
+                result.put("videoId", JSObject.NULL);
+            }
+            call.resolve(result);
+        });
+    }
+
     @PluginMethod
     public void storageInfo(PluginCall call) {
         long[] stats = youtube.cacheStats();

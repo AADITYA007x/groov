@@ -10,7 +10,7 @@ import { cachedMixSongs, getMix, loadMixSongs } from "../library/mixes";
 import { addTrackToPlaylist, createPlaylist, getPlaylists } from "../library/playlists";
 import type { Item } from "../types";
 import { $, escapeHtml } from "../utils";
-import { cardMarkup, trackRowMarkup } from "./cards";
+import { artistLinksMarkup, cardMarkup, trackRowMarkup } from "./cards";
 
 const art = $<HTMLImageElement>("detail-art");
 const kindEl = $("detail-kind");
@@ -78,9 +78,7 @@ async function renderAlbum(collectionId: number, t: number): Promise<void> {
   const page = await fetchAlbumPage(collectionId);
   if (t !== token) return;
   const artistName = page.album.subtitle.replace(/^\d{4} · /, "");
-  const artistLink = page.album.artistId
-    ? `<a class="detail-artist-link" data-artist="${page.album.artistId}" data-artist-name="${escapeHtml(artistName)}" href="#">${escapeHtml(artistName)}</a>`
-    : escapeHtml(artistName);
+  const artistLink = `<span class="detail-artist-link">${artistLinksMarkup(artistName, page.album.artistId)}</span>`;
   const bits = [artistLink, page.year ? String(page.year) : "", `${page.tracks.length} songs`].filter(Boolean);
   setHeader("Album", page.album.name, bits.join(" · "), page.album.artwork);
   // Album songs carry the album's art (lookups often omit it on tracks).

@@ -245,6 +245,39 @@ final class YouTubeAudio {
         return videoId;
     }
 
+    /**
+     * The song's real music video (YouTube Music's song uploads are usually
+     * just the album cover). Only one about as long as the song playing, so
+     * switching between audio and video keeps the same spot in the song.
+     * Null when there's no such video. Remembered per song.
+     */
+    String findMusicVideo(Track track, long audioSec) throws Exception {
+        String cacheKey = "mv:" + track.key;
+        if (ids.contains(cacheKey)) {
+            String v = ids.getString(cacheKey, "");
+            return v.isEmpty() ? null : v;
+        }
+        StreamingService yt = ServiceList.YouTube;
+        String query = (track.title + " " + track.artist).trim();
+        SearchQueryHandler q = yt
+            .getSearchQHFactory()
+            .fromQuery(query, Collections.singletonList(YoutubeSearchQueryHandlerFactory.MUSIC_VIDEOS), "");
+        String found = "";
+        int checked = 0;
+        for (InfoItem item : SearchInfo.getInfo(yt, q).getRelatedItems()) {
+            if (!(item instanceof StreamInfoItem)) continue;
+            if (++checked > 5) break;
+            long d = ((StreamInfoItem) item).getDuration();
+            if (audioSec > 0 && d > 0 && Math.abs(d - audioSec) <= 4) {
+                found = yt.getStreamLHFactory().getId(item.getUrl());
+                break;
+            }
+        }
+        ids.edit().putString(cacheKey, found).apply();
+        Log.i(TAG, "Music video for " + query + ": " + (found.isEmpty() ? "none" : found));
+        return found.isEmpty() ? null : found;
+    }
+
     // --- Download ------------------------------------------------------------------
 
     /** Fetches YouTube's info for a video; remembers its loudness while at it. */

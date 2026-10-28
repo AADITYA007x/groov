@@ -137,3 +137,24 @@ export function sectionMarkup(title: string, items: Item[]): string {
     </div>
   `;
 }
+
+/**
+ * "Arijit Singh, Shreya Ghoshal & Pritam" → one link per artist. The first
+ * opens straight away (we know their id); the others are looked up by name.
+ */
+export function splitArtists(subtitle: string): string[] {
+  const parts = subtitle
+    .split(/\s*,\s*|\s+&\s+|\s+feat\.?\s+|\s+ft\.?\s+/i)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  return parts.length ? parts : [subtitle];
+}
+
+export function artistLinksMarkup(subtitle: string, artistId?: number | null): string {
+  return splitArtists(subtitle)
+    .map(
+      (name, i) =>
+        `<a class="artist-link" href="#" data-artist="${i === 0 && artistId ? artistId : ""}" data-artist-name="${escapeHtml(name)}">${escapeHtml(name)}</a>`,
+    )
+    .join(", ");
+}
