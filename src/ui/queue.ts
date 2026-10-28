@@ -226,9 +226,12 @@ export function initQueue(): void {
       removeUpcoming(Number(remove.dataset.remove));
       return;
     }
-    const play = target.closest<HTMLElement>("[data-play]");
+    // Tap anywhere on a song (not ≡ or ✕) to play it.
+    if (target.closest(".queue-handle")) return;
+    const play = target.closest<HTMLElement>(".queue-row[data-index]");
     if (play) {
-      void playUpcoming(Number(play.dataset.play));
+      play.classList.add("starting");
+      void playUpcoming(Number(play.dataset.index));
       return;
     }
     const autoRemove = target.closest<HTMLElement>("[data-auto-remove]");
@@ -247,6 +250,8 @@ export function initQueue(): void {
   enableDrag();
   bus.on("queueupdate", render);
   bus.on("playstate", (playing) => sheet.classList.toggle("paused", !playing));
+  // Finding/downloading the song: a spinner on it instead of the bars.
+  bus.on("loading", (on) => sheet.classList.toggle("is-loading", on));
   bus.on("trackchange", render);
   bus.on("queuechange", () => {
     manualIds = new Set();

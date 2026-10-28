@@ -55,4 +55,7 @@ export function initFollowsUi(): void {
     if ($("recent-view").style.display !== "none") void renderFollowedRow();
   });
   renderSidebar();
+  // Radio mixes in songs by artists you follow: have them ready in advance.
+  setTimeout(() => void loadFollowedSongs().catch(() => undefined), 4000);
+  bus.on("followchange", () => void loadFollowedSongs().catch(() => undefined));
 }

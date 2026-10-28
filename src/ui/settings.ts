@@ -16,7 +16,7 @@ const versionEl = $("app-version");
 const crossfadeBtn = $("crossfade-btn");
 const autoplayBtn = $("autoplay-btn");
 const favMixBtn = $("favmix-btn");
-const FAV_LABELS: Record<FavouriteMix, string> = { off: "Off", sometimes: "Sometimes", often: "Often" };
+const FAV_LABELS: Record<FavouriteMix, string> = { off: "Off", rarely: "Rarely", sometimes: "Sometimes" };
 
 function renderFavMix(): void {
   favMixBtn.textContent = `Your favourites in radio: ${FAV_LABELS[getFavouriteMix()]}`;
@@ -28,10 +28,10 @@ async function chooseFavMix(): Promise<void> {
     "Your favourites in radio",
     [
       { label: "Off", value: "off", active: current === "off" },
-      { label: "Sometimes (about 1 in 7 songs)", value: "sometimes", active: current === "sometimes" },
-      { label: "Often (about 1 in 4 songs)", value: "often", active: current === "often" },
+      { label: "Rarely (about 1 in 12 songs)", value: "rarely", active: current === "rarely" },
+      { label: "Sometimes (about 1 in 6 songs)", value: "sometimes", active: current === "sometimes" },
     ],
-    "Mixes your liked songs and songs by artists you follow into radio and autoplay, now and then. Never one you played in the last 3 hours.",
+    "Mixes your liked songs and songs by artists you follow into radio and autoplay, now and then. Never one you played in the last hour. Marked ♥ in Up next.",
   );
   if (choice === null) return;
   setFavouriteMix(choice);

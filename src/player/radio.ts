@@ -86,11 +86,41 @@ export function shortTitle(name: string): string {
   return name.replace(/\s*[([][^)\]]*[)\]]/g, "").trim() || name;
 }
 
+/** Channels that aren't the artist's name. */
+const CHANNEL_ALIASES: Record<string, string> = { bangtantv: "BTS", "bts official": "BTS", blackpinkofficial: "BLACKPINK" };
+
+/** "ImagineDragons" → "Imagine Dragons"; known channels → the artist. */
+function channelToArtist(channel: string): string {
+  const alias = CHANNEL_ALIASES[channel.toLowerCase()];
+  if (alias) return alias;
+  if (!channel.includes(" ") && /^[A-Z][a-z]+(?:[A-Z][a-z]+)+$/.test(channel)) return channel.replace(/([a-z])([A-Z])/g, "$1 $2");
+  return channel;
+}
+
+/** "BTS (방탄소년단)" → "BTS"; "정국 (Jung Kook)" → "Jung Kook": the name in Latin letters. */
+function latinName(name: string): string {
+  const m = name.match(/^(.+?)\s*\((.+)\)$/);
+  if (!m) return name.trim();
+  const latin = (x: string) => (x.match(/[A-Za-z]/g)?.length ?? 0) / x.replace(/\s/g, "").length;
+  return (latin(m[1]) >= latin(m[2]) ? m[1] : m[2]).trim();
+}
+
+/**
+ * K-pop style video titles: "BTS (방탄소년단) 'Dynamite' Official MV" →
+ * {artist: "BTS", title: "Dynamite"}. Only when a video keyword follows the
+ * quotes (so "they don't know 'bout us" is left alone).
+ */
+function parseQuotedTitle(title: string): { artist: string; title: string } | null {
+  const m = title.match(/^(.+?)\s*['‘’"“](.+?)['‘’"”]\s*(?:official|m\/?v\b|music video|performance|special video|visuali[sz]er|lyric|teaser)/i);
+  return m ? { artist: latinName(m[1]), title: m[2].trim() } : null;
+}
+
 function toItem(t: RadioTrack): Item {
-  const artist = cleanArtist(t.artist || "");
+  const quoted = parseQuotedTitle(t.title || "");
+  const artist = quoted?.artist || channelToArtist(cleanArtist(t.artist || ""));
   return {
     id: `yt-${t.videoId}`,
-    name: cleanTitle(t.title, artist),
+    name: quoted?.title || cleanTitle(t.title, artist),
     subtitle: artist,
     artwork: t.artwork,
     previewUrl: null,
@@ -139,7 +169,7 @@ export async function startRadio(seed?: Item): Promise<void> {
   bus.emit("toast", `📻 Starting radio from "${item.name}"…`);
   let items: Item[];
   try {
-    items = mixInFavourites(await radioAfter(item), item.id);
+    items = mixInFavourites(await radioAfter(item), [item.id], true);
   } catch {
     items = [];
   }
@@ -177,11 +207,13 @@ async function topUp(): Promise<void> {
 // Like YouTube Music: every few radio/autoplay songs, one of yours — a liked
 // song or one by an artist you follow. How often is up to you (Settings).
 
-export type FavouriteMix = "off" | "sometimes" | "often";
-const EVERY: Record<FavouriteMix, number> = { off: 0, sometimes: 6, often: 3 };
+export type FavouriteMix = "off" | "rarely" | "sometimes";
+/** One favourite after about this many radio songs. */
+const EVERY: Record<FavouriteMix, number> = { off: 0, rarely: 12, sometimes: 6 };
 
 export function getFavouriteMix(): FavouriteMix {
-  return storage.get<FavouriteMix>("groov:favourite-mix", "sometimes");
+  const v = storage.get<string>("groov:favourite-mix", "rarely");
+  return v === "off" || v === "rarely" || v === "sometimes" ? v : v === "often" ? "sometimes" : "rarely";
 }
 
 export function setFavouriteMix(mix: FavouriteMix): void {
@@ -191,47 +223,67 @@ export function setFavouriteMix(mix: FavouriteMix): void {
 /** Songs that were mixed in as favourites (Up next marks them ♥). */
 export const favouriteIds = new Set<string>();
 const recentlyMixed: string[] = [];
+/** Radio songs since the last favourite (kept across top-ups, so the rhythm holds). */
+let sinceFavourite = 0;
+/** The next gap: `every`, give or take one, so it doesn't feel mechanical. */
+let nextGap = 0;
 
 function favouritePool(exclude: Set<string>): Item[] {
   const followed = getFollows().map((f) => f.name.toLowerCase());
   const byFollowed = (i: Item) => followed.includes(mainArtist(i.subtitle).toLowerCase());
   const liked = getLikedPlaylist()?.tracks ?? [];
-  const played = topSongs(0, 300).map((s) => s.item).filter(byFollowed);
-  const pool = [...liked, ...cachedFollowedSongs(), ...played];
-  // Not anything played in the last 3 hours, already queued or just mixed in.
-  const recent = new Set(playsSince(Date.now() - 3 * 3600_000).map((e) => e[0]));
+  const top = topSongs(0, 300).map((s) => s.item);
+  const recent = new Set(playsSince(Date.now() - 3600_000).map((e) => e[0])); // not in the last hour
   const seen = new Set<string>();
-  return pool.filter((i) => {
-    const key = normName(shortTitle(i.name));
-    if (seen.has(key) || exclude.has(i.id) || recent.has(i.id) || recentlyMixed.includes(i.id)) return false;
-    seen.add(key);
-    return true;
-  });
+  const usable = (list: Item[]) =>
+    list.filter((i) => {
+      const key = normName(shortTitle(i.name));
+      if (seen.has(key) || exclude.has(i.id) || recent.has(i.id) || recentlyMixed.includes(i.id)) return false;
+      seen.add(key);
+      return true;
+    });
+  const shuffle = (list: Item[]) => list.sort(() => Math.random() - 0.5);
+  // Your picks first (liked songs, artists you follow), in random order…
+  const pool = shuffle(usable([...liked, ...cachedFollowedSongs(), ...top.filter(byFollowed)]));
+  // …and when there are too few, then your most-played songs and playlists.
+  if (pool.length < 4) {
+    const extra = [...topSongs(Date.now() - 60 * 86400_000, 60).filter((s) => s.plays >= 2).map((s) => s.item), ...librarySongs()];
+    pool.push(...shuffle(usable(extra)));
+  }
+  return pool;
 }
 
-/** Put one of your favourites after every few radio songs. */
-export function mixInFavourites(items: Item[], ...alsoExclude: string[]): Item[] {
+/**
+ * Put one of your favourites in every so often (Settings). `fresh`: a new
+ * radio is starting, so start counting again.
+ */
+export function mixInFavourites(items: Item[], alsoExclude: string[] = [], fresh = false): Item[] {
   const every = EVERY[getFavouriteMix()];
-  if (!every || items.length < every) return items;
+  if (!every || !items.length) return items;
+  if (fresh) {
+    sinceFavourite = 0;
+    nextGap = 0;
+  }
   const exclude = new Set([...getUpcoming(), getCurrentTrackId() ?? "", ...alsoExclude, ...items.map((i) => i.id)]);
   const names = new Set(items.map((i) => normName(shortTitle(i.name))));
-  const pool = favouritePool(exclude)
-    .filter((i) => !names.has(normName(shortTitle(i.name))))
-    .sort(() => Math.random() - 0.5);
+  const pool = favouritePool(exclude).filter((i) => !names.has(normName(shortTitle(i.name))));
   if (!pool.length) return items;
   const out: Item[] = [];
-  items.forEach((item, i) => {
+  for (const item of items) {
     out.push(item);
-    // Not always on the dot: every `every` songs, give or take one.
-    if ((i + 1) % every === 0 && pool.length && Math.random() > 0.15) {
+    sinceFavourite++;
+    if (!nextGap) nextGap = every - 1 + Math.floor(Math.random() * 3); // every ± 1
+    if (sinceFavourite >= nextGap && pool.length) {
       const fav = pool.shift()!;
       trackRegistry.set(fav.id, fav);
       favouriteIds.add(fav.id);
       recentlyMixed.push(fav.id);
-      if (recentlyMixed.length > 30) recentlyMixed.shift();
+      if (recentlyMixed.length > 15) recentlyMixed.shift();
       out.push(fav);
+      sinceFavourite = 0;
+      nextGap = 0;
     }
-  });
+  }
   return out;
 }
 
@@ -394,7 +446,7 @@ async function preparePreview(): Promise<void> {
   previewTriedFor = lastId;
   bus.emit("queueupdate", undefined);
   try {
-    const items = mixInFavourites(await radioForList(seed));
+    const items = mixInFavourites(await radioForList(seed), [], true);
     items.forEach((i) => trackRegistry.set(i.id, i));
     preview = { seedId: lastId, seed, items };
     removed.clear();
@@ -433,7 +485,7 @@ async function autoplay(): Promise<boolean> {
     let items = getAutoplayPreview()?.items;
     if (!items?.length) {
       bus.emit("toast", `📻 Autoplay: more like "${item.name}"…`);
-      items = mixInFavourites((await radioAfter(item)).filter((i) => i.id !== item.id), item.id);
+      items = mixInFavourites((await radioAfter(item)).filter((i) => i.id !== item.id), [item.id], true);
     }
     if (!items.length || getCurrentTrackId() !== item.id) return false;
     items.forEach((i) => trackRegistry.set(i.id, i));

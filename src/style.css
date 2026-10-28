@@ -2966,3 +2966,25 @@ body.np-open {
   color: var(--accent-2-bright);
   font-weight: 600;
 }
+
+.queue-row[data-index] {
+  cursor: pointer;
+}
+
+.queue-row.starting {
+  background: var(--glass-bg);
+}
+
+.queue-sheet.is-loading .queue-row.current .queue-eq i {
+  display: none;
+}
+
+.queue-sheet.is-loading .queue-row.current .queue-eq::after {
+  content: "";
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--glass-border);
+  border-top-color: var(--accent-2-bright);
+  animation: spin 0.8s linear infinite;
+}
