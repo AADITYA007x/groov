@@ -125,7 +125,7 @@ export function playlistRowMarkup(playlistId: string, item: Item, addedBy?: stri
           addedBy ? ` · <span class="playlist-row-added-by">added by ${escapeHtml(addedBy)}</span>` : ""
         }</div>
       </div>
-      <button class="playlist-row-remove" data-playlist="${escapeHtml(playlistId)}" data-track="${escapeHtml(item.id)}" aria-label="Remove from playlist">✕</button>
+      <button class="add-overlay row-add" data-id="${escapeHtml(item.id)}" data-playlist="${escapeHtml(playlistId)}" aria-label="More: queue, remove, playlists">⋯</button>
     </div>
   `;
 }

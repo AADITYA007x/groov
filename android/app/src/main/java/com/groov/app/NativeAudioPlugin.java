@@ -66,7 +66,93 @@ public class NativeAudioPlugin extends Plugin {
     @Override
     public void load() {
         youtube = new YouTubeAudio(getContext());
-        main.post(() -> player = createPlayer(true));
+        eqPrefs = getContext().getSharedPreferences("groov_eq", android.content.Context.MODE_PRIVATE);
+        android.media.AudioManager am = (android.media.AudioManager) getContext().getSystemService(android.content.Context.AUDIO_SERVICE);
+        audioSession = am != null ? am.generateAudioSessionId() : C.AUDIO_SESSION_ID_UNSET;
+        main.post(() -> {
+            player = createPlayer(true);
+            setUpEffects();
+        });
+    }
+
+    // --- Equalizer --------------------------------------------------------------
+    // Both players (crossfade) share one audio session, so one equalizer and
+    // one bass boost cover every song. Settings are kept on the phone.
+
+    private int audioSession = C.AUDIO_SESSION_ID_UNSET;
+    private android.content.SharedPreferences eqPrefs;
+    private android.media.audiofx.Equalizer equalizer;
+    private android.media.audiofx.BassBoost bassBoost;
+
+    private void setUpEffects() {
+        if (audioSession == C.AUDIO_SESSION_ID_UNSET) return;
+        try {
+            equalizer = new android.media.audiofx.Equalizer(0, audioSession);
+        } catch (Exception e) {
+            Log.i(TAG, "No equalizer on this phone: " + YouTubeAudio.describe(e));
+        }
+        try {
+            bassBoost = new android.media.audiofx.BassBoost(0, audioSession);
+        } catch (Exception e) {
+            Log.i(TAG, "No bass boost on this phone: " + YouTubeAudio.describe(e));
+        }
+        applyEffects();
+    }
+
+    private void applyEffects() {
+        int preset = eqPrefs.getInt("preset", -1);
+        int bass = eqPrefs.getInt("bass", 0);
+        try {
+            if (equalizer != null) {
+                if (preset >= 0 && preset < equalizer.getNumberOfPresets()) {
+                    equalizer.usePreset((short) preset);
+                    equalizer.setEnabled(true);
+                } else {
+                    equalizer.setEnabled(false);
+                }
+            }
+            if (bassBoost != null) {
+                if (bass > 0 && bassBoost.getStrengthSupported()) {
+                    bassBoost.setStrength((short) Math.min(1000, bass));
+                    bassBoost.setEnabled(true);
+                } else {
+                    bassBoost.setEnabled(false);
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Couldn't apply the equalizer", e);
+        }
+    }
+
+    /** {available, presets: [names], preset (-1 = off), bass (0..1000), bassAvailable}. */
+    @PluginMethod
+    public void eqInfo(PluginCall call) {
+        main.post(() -> {
+            JSObject result = new JSObject();
+            JSArray presets = new JSArray();
+            try {
+                if (equalizer != null) for (short i = 0; i < equalizer.getNumberOfPresets(); i++) presets.put(equalizer.getPresetName(i));
+            } catch (Exception ignored) {
+                // some phones refuse: none listed
+            }
+            result.put("available", equalizer != null && presets.length() > 0);
+            result.put("presets", presets);
+            result.put("preset", eqPrefs.getInt("preset", -1));
+            result.put("bass", eqPrefs.getInt("bass", 0));
+            result.put("bassAvailable", bassBoost != null && bassBoost.getStrengthSupported());
+            call.resolve(result);
+        });
+    }
+
+    /** {preset?: index or -1 for off, bass?: 0..1000}. */
+    @PluginMethod
+    public void setEq(PluginCall call) {
+        android.content.SharedPreferences.Editor edit = eqPrefs.edit();
+        if (call.hasOption("preset")) edit.putInt("preset", call.getInt("preset", -1));
+        if (call.hasOption("bass")) edit.putInt("bass", Math.max(0, Math.min(1000, call.getInt("bass", 0))));
+        edit.apply();
+        main.post(this::applyEffects);
+        call.resolve();
     }
 
     @Override
@@ -80,6 +166,8 @@ public class NativeAudioPlugin extends Plugin {
                 player.release();
                 player = null;
             }
+            if (equalizer != null) equalizer.release();
+            if (bassBoost != null) bassBoost.release();
         });
     }
 
@@ -98,6 +186,7 @@ public class NativeAudioPlugin extends Plugin {
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .build();
+        if (audioSession != C.AUDIO_SESSION_ID_UNSET) p.setAudioSessionId(audioSession); // shared: see Equalizer
 
         p.addListener(new Player.Listener() {
             @Override

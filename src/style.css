@@ -3009,3 +3009,11 @@ body.np-open {
   font-weight: 800;
   vertical-align: 1px;
 }
+
+.popover-action.danger {
+  color: #ff8a8a;
+}
+
+.playlist-row {
+  cursor: pointer;
+}

@@ -89,6 +89,29 @@ final class YouTubeAudio {
     /** Returns a playable local file for the track, downloading it if needed. */
     File fetch(Track track) throws Exception {
         String videoId = resolveVideoId(track);
+        try {
+            return fetchVideo(videoId);
+        } catch (Exception e) {
+            // Some uploads can't be played (age-restricted, blocked here…):
+            // try the song's other matches before giving up.
+            if (track.key.startsWith("yt-") || isNetworkError(e)) throw e;
+            Log.i(TAG, "Match " + videoId + " for " + track.title + " failed (" + describe(e) + "), trying others");
+            for (String other : searchCandidates(track)) {
+                if (other.equals(videoId)) continue;
+                try {
+                    File file = fetchVideo(other);
+                    ids.edit().putString(track.key, other).apply();
+                    return file;
+                } catch (Exception again) {
+                    if (isNetworkError(again)) throw again;
+                    Log.i(TAG, "Also failed: " + other + " (" + describe(again) + ")");
+                }
+            }
+            throw e;
+        }
+    }
+
+    private File fetchVideo(String videoId) throws Exception {
         Object lock = locks.computeIfAbsent(videoId, k -> new Object());
         synchronized (lock) {
             File cached = findCached(videoId);
@@ -326,34 +349,48 @@ final class YouTubeAudio {
         String known = ids.getString(track.key, null);
         if (known != null) return known;
 
-        StreamingService yt = ServiceList.YouTube;
-        String query = (track.title + " " + track.artist).trim();
-        SearchQueryHandler q = yt
-            .getSearchQHFactory()
-            .fromQuery(query, Collections.singletonList(YoutubeSearchQueryHandlerFactory.MUSIC_SONGS), "");
-        List<StreamInfoItem> songs = new ArrayList<>();
-        for (InfoItem item : SearchInfo.getInfo(yt, q).getRelatedItems()) {
-            if (item instanceof StreamInfoItem) songs.add((StreamInfoItem) item);
-        }
-        if (songs.isEmpty()) throw new IOException("No YouTube Music match for " + query);
-
-        // Prefer the first of the top results whose length matches the
-        // catalog's (within 10s); that skips live versions, remixes, etc.
-        StreamInfoItem pick = songs.get(0);
-        if (track.durationMs > 0) {
-            long target = track.durationMs / 1000;
-            for (int i = 0; i < Math.min(5, songs.size()); i++) {
-                long d = songs.get(i).getDuration();
-                if (d > 0 && Math.abs(d - target) <= 10) {
-                    pick = songs.get(i);
-                    break;
-                }
-            }
-        }
-
-        String videoId = yt.getStreamLHFactory().getId(pick.getUrl());
+        List<String> candidates = searchCandidates(track);
+        if (candidates.isEmpty()) throw new IOException("No YouTube Music match for " + track.title);
+        String videoId = candidates.get(0);
         ids.edit().putString(track.key, videoId).apply();
         return videoId;
+    }
+
+    /**
+     * YouTube Music matches for a song, best first: results about as long as
+     * the catalog's version (within 10s; skips live versions, remixes), then
+     * the rest of the top results, then regular YouTube videos.
+     */
+    private List<String> searchCandidates(Track track) throws Exception {
+        StreamingService yt = ServiceList.YouTube;
+        String query = (track.title + " " + track.artist).trim();
+        List<String> good = new ArrayList<>();
+        List<String> rest = new ArrayList<>();
+        for (String filter : new String[] { YoutubeSearchQueryHandlerFactory.MUSIC_SONGS, YoutubeSearchQueryHandlerFactory.VIDEOS }) {
+            SearchQueryHandler q = yt.getSearchQHFactory().fromQuery(query, Collections.singletonList(filter), "");
+            int n = 0;
+            for (InfoItem item : SearchInfo.getInfo(yt, q).getRelatedItems()) {
+                if (!(item instanceof StreamInfoItem) || ++n > 5) continue;
+                String id = yt.getStreamLHFactory().getId(item.getUrl());
+                long d = ((StreamInfoItem) item).getDuration();
+                boolean fits = track.durationMs <= 0 || (d > 0 && Math.abs(d - track.durationMs / 1000) <= 10);
+                (fits ? good : rest).add(id);
+            }
+            if (!good.isEmpty()) break; // songs found: no need for plain videos
+        }
+        List<String> all = new ArrayList<>(good);
+        for (String id : rest) if (!all.contains(id)) all.add(id);
+        return all;
+    }
+
+    private static boolean isNetworkError(Throwable e) {
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            if (t instanceof java.net.UnknownHostException
+                || t instanceof java.net.SocketTimeoutException
+                || t instanceof java.net.ConnectException
+                || t instanceof javax.net.ssl.SSLException) return true;
+        }
+        return false;
     }
 
     /**

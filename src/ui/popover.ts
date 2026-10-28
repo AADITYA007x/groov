@@ -2,7 +2,15 @@
 // On a phone it's a bottom sheet (always fits, scrolls); on a laptop a
 // small menu next to the button, flipped up when there's no room below.
 import { addTrackToPlaylist, createPlaylist, getPlaylists, removeTrackFromPlaylist } from "../library/playlists";
-import { addToQueueEnd, getCurrentTrackId, playNextInsert, queueFromElement, playTrack } from "../player/player";
+import {
+  addToQueueEnd,
+  getCurrentTrackId,
+  isTrackPlaying,
+  playItem,
+  playNextInsert,
+  queueFromElement,
+  playTrack,
+} from "../player/player";
 import { startRadio } from "../player/radio";
 import { isLiked, isLikedPlaylist, toggleLike } from "../library/liked";
 import { bus, trackRegistry } from "../state";
@@ -46,9 +54,20 @@ function place(anchorEl: HTMLElement): void {
   }
 }
 
-export function openAddToPlaylist(trackId: string, anchorEl: HTMLElement): void {
+/** Play this song now, as part of the list it's shown in (if any). */
+function playNow(trackId: string, anchorEl: HTMLElement): void {
+  const btn = anchorEl
+    .closest(".playlist-row, .card, .top-result-card")
+    ?.querySelector<HTMLElement>(".playlist-row-play, .play-overlay");
+  if (btn && !isTrackPlaying(trackId)) btn.click();
+  else if (!btn) void playItem(trackRegistry.get(trackId)!);
+}
+
+/** playlistId: opened from a song in that playlist (offers "Remove from …"). */
+export function openAddToPlaylist(trackId: string, anchorEl: HTMLElement, playlistId?: string): void {
   const item = trackRegistry.get(trackId);
   if (!item) return;
+  const inPlaylist = playlistId ? getPlaylists()[playlistId] : undefined;
   const playlists = getPlaylists();
   // Liked Songs has its own ❤️ action; other playlists listed below it.
   const ids = Object.keys(playlists).filter((id) => !isLikedPlaylist(playlists[id]));
@@ -61,11 +80,17 @@ export function openAddToPlaylist(trackId: string, anchorEl: HTMLElement): void 
     ${
       isCurrent
         ? ""
-        : `<button class="popover-action" data-action="next">▶ Play next</button>
+        : `<button class="popover-action" data-action="now">▶ Play now</button>
+           <button class="popover-action" data-action="next">⤵ Play next</button>
            <button class="popover-action" data-action="queue">➕ Add to queue</button>`
     }
     <button class="popover-action" data-action="like">${liked ? "💔 Remove from Liked Songs" : "❤️ Like"}</button>
     <button class="popover-action" data-action="radio">📻 Start radio</button>
+    ${
+      inPlaylist
+        ? `<button class="popover-action danger" data-action="remove">🗑 Remove from "${escapeHtml(inPlaylist.name)}"</button>`
+        : ""
+    }
     <div class="popover-divider"></div>
     <div class="popover-label">Add to playlist</div>
   `;
@@ -94,7 +119,11 @@ export function openAddToPlaylist(trackId: string, anchorEl: HTMLElement): void 
   popover.querySelectorAll<HTMLElement>(".popover-action").forEach((btn) => {
     btn.addEventListener("click", () => {
       const action = btn.dataset.action;
-      if (action === "next") {
+      if (action === "now") playNow(item.id, anchorEl);
+      else if (action === "remove" && playlistId) {
+        removeTrackFromPlaylist(playlistId, item.id);
+        bus.emit("toast", `Removed from "${inPlaylist?.name ?? "playlist"}"`);
+      } else if (action === "next") {
         playNextInsert(item);
         markManual(item.id);
         bus.emit("toast", `▶ "${item.name}" plays next`);
@@ -137,7 +166,14 @@ export function initPopover(): void {
     if (addBtn) {
       e.preventDefault();
       e.stopPropagation();
-      openAddToPlaylist(addBtn.dataset.id!, addBtn);
+      openAddToPlaylist(addBtn.dataset.id!, addBtn, addBtn.dataset.playlist);
+      return;
+    }
+    // Tap anywhere on a song row to play it (not its buttons or links).
+    const row = target.closest<HTMLElement>(".playlist-row");
+    if (row && !target.closest("button, a, input") && popover.style.display === "none") {
+      const play = row.querySelector<HTMLElement>(".playlist-row-play");
+      if (play && !isTrackPlaying(play.dataset.id!)) play.click();
       return;
     }
     if (popover.style.display !== "none" && !popover.contains(target)) close();
@@ -157,7 +193,7 @@ export function initPopover(): void {
     const id = el.dataset.id ?? el.querySelector<HTMLElement>("[data-id]")?.dataset.id;
     if (!id || !trackRegistry.has(id)) return;
     e.preventDefault();
-    openAddToPlaylist(id, el);
+    openAddToPlaylist(id, el, el.querySelector<HTMLElement>("[data-playlist]")?.dataset.playlist);
   });
 
   // A plain click on a track card plays it in-app instead of following the
