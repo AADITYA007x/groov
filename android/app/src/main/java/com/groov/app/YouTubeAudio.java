@@ -172,6 +172,64 @@ final class YouTubeAudio {
         return out;
     }
 
+    static final class ImportedPlaylist {
+        final String name;
+        final List<RadioTrack> tracks;
+
+        ImportedPlaylist(String name, List<RadioTrack> tracks) {
+            this.name = name;
+            this.tracks = tracks;
+        }
+    }
+
+    /**
+     * A YouTube or YouTube Music playlist from its link (any link with
+     * "list=…", or a playlist id). Up to `max` songs, page by page.
+     */
+    ImportedPlaylist importPlaylist(String link, int max) throws Exception {
+        String id = link.trim();
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("[?&]list=([A-Za-z0-9_-]+)").matcher(id);
+        if (m.find()) id = m.group(1);
+        if (!id.matches("[A-Za-z0-9_-]{10,}")) throw new IOException("That doesn't look like a YouTube playlist link");
+        if (id.startsWith("RD")) throw new IOException("Mixes can't be imported — open the mix and use a saved playlist instead");
+        StreamingService yt = ServiceList.YouTube;
+        String url = "https://www.youtube.com/playlist?list=" + id;
+        PlaylistInfo info = PlaylistInfo.getInfo(yt, url);
+        List<StreamInfoItem> items = new ArrayList<>(info.getRelatedItems());
+        org.schabi.newpipe.extractor.Page page = info.getNextPage();
+        while (items.size() < max && org.schabi.newpipe.extractor.Page.isValid(page)) {
+            org.schabi.newpipe.extractor.ListExtractor.InfoItemsPage<StreamInfoItem> more = PlaylistInfo.getMoreItems(yt, url, page);
+            items.addAll(more.getItems());
+            page = more.getNextPage();
+        }
+        List<RadioTrack> out = new ArrayList<>();
+        for (StreamInfoItem item : items) {
+            if (out.size() >= max) break;
+            String videoId;
+            try {
+                videoId = yt.getStreamLHFactory().getId(item.getUrl());
+            } catch (Exception e) {
+                continue;
+            }
+            out.add(new RadioTrack(videoId, item.getName(), item.getUploaderName(), item.getDuration(), bestThumb(item.getThumbnails())));
+        }
+        if (out.isEmpty()) throw new IOException("This playlist is empty or private");
+        String name = info.getName();
+        return new ImportedPlaylist(name == null || name.isEmpty() ? "Imported playlist" : name, out);
+    }
+
+    private static String bestThumb(List<Image> thumbs) {
+        String thumb = null;
+        int best = -1;
+        for (Image image : thumbs) {
+            if (image.getHeight() > best) {
+                best = image.getHeight();
+                thumb = image.getUrl();
+            }
+        }
+        return thumb;
+    }
+
     boolean isCached(Track track) {
         String videoId = knownVideoId(track.key);
         return videoId != null && findCached(videoId) != null;

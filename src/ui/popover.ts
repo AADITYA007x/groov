@@ -142,7 +142,13 @@ export function initPopover(): void {
     }
     if (popover.style.display !== "none" && !popover.contains(target)) close();
   });
-  window.addEventListener("resize", () => popover.style.display !== "none" && close());
+  // A laptop window resized: the menu would be in the wrong place. (Not on
+  // phones: the keyboard opening resizes the screen, and that's no reason.)
+  window.addEventListener("resize", () => {
+    if (popover.style.display === "none" || popover.classList.contains("sheet")) return;
+    if (popover.contains(document.activeElement)) return;
+    close();
+  });
 
   // Long-press a song (card or row) to open its menu, like other music apps.
   document.addEventListener("contextmenu", (e) => {

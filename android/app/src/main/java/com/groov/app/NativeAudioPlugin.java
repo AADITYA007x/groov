@@ -436,6 +436,36 @@ public class NativeAudioPlugin extends Plugin {
         });
     }
 
+    /** {url} → {name, tracks: [{videoId, title, artist, durationSec, artwork}]}. */
+    @PluginMethod
+    public void importPlaylist(PluginCall call) {
+        String url = call.getString("url", "");
+        Integer max = call.getInt("max", 500);
+        radioWorker.execute(() -> {
+            try {
+                YouTubeAudio.ImportedPlaylist p = youtube.importPlaylist(url, max == null ? 500 : max);
+                JSArray tracks = new JSArray();
+                for (YouTubeAudio.RadioTrack t : p.tracks) {
+                    JSObject o = new JSObject();
+                    o.put("videoId", t.videoId);
+                    o.put("title", t.title);
+                    o.put("artist", t.uploader);
+                    o.put("durationSec", t.durationSec);
+                    o.put("artwork", t.thumbnail);
+                    tracks.put(o);
+                }
+                JSObject result = new JSObject();
+                result.put("name", p.name);
+                result.put("tracks", tracks);
+                call.resolve(result);
+            } catch (Exception e) {
+                Log.w(TAG, "Import failed for " + url, e);
+                String msg = e.getMessage();
+                call.reject(msg != null && !msg.isEmpty() ? msg : YouTubeAudio.describe(e));
+            }
+        });
+    }
+
     /** Download the next song in the background so it starts instantly. */
     @PluginMethod
     public void prefetch(PluginCall call) {
