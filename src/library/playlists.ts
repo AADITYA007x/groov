@@ -111,3 +111,15 @@ export function fillMissingArtwork(trackId: string, videoId: string): string | n
   if (changed) save(playlists);
   return changed ? url : null;
 }
+
+/** Rename (owner only). Returns false if not allowed. */
+export function renamePlaylist(id: string, name: string): boolean {
+  const playlists = getPlaylists();
+  const playlist = playlists[id];
+  const clean = name.trim().slice(0, 100);
+  if (!playlist || !clean || !isOwner(playlist)) return false;
+  playlist.name = clean;
+  save(playlists);
+  if (playlist.cloud) enqueue({ type: "renamePlaylist", id, name: clean });
+  return true;
+}

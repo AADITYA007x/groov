@@ -1,6 +1,6 @@
 // Navigation between the search/home view and playlist views, plus the
 // sidebar playlist list.
-import { addTrackToPlaylist, deletePlaylist, getPlaylists, isOwner, removeTrackFromPlaylist, createPlaylist } from "../library/playlists";
+import { addTrackToPlaylist, renamePlaylist, deletePlaylist, getPlaylists, isOwner, removeTrackFromPlaylist, createPlaylist } from "../library/playlists";
 import { hasNativeAudio, nativeAudio } from "../player/native-audio";
 import { getAccount } from "../cloud/session";
 import { sharePlaylist } from "../cloud/sync";
@@ -8,7 +8,7 @@ import { playPlaylist, toItem } from "../player/radio";
 import { isShuffleOn, toggleShuffle } from "../player/player";
 import { findArtistId } from "../api/itunes";
 import { renderDetail } from "./detail";
-import { isLikedPlaylist } from "../library/liked";
+import { isLikedPlaylist, LIKED_NAME } from "../library/liked";
 import { renderStats } from "./stats";
 import { canDownload, downloadPlaylist, isPlaylistDownloaded, playlistProgress, removePlaylistDownload, retryFailed } from "../library/downloads";
 import { chooseOption } from "./choice";
@@ -196,6 +196,7 @@ function renderPlaylistMeta(playlist: Playlist): void {
   const liked = isLikedPlaylist(playlist);
   shareBtn.style.display = owner && getAccount() && !liked ? "inline-flex" : "none";
   deleteBtn.style.display = liked ? "none" : "inline-flex";
+  $("rename-playlist-btn").style.display = owner && !liked ? "inline-flex" : "none";
   const hasSongs = playlist.tracks.length > 0;
   $("play-playlist-btn").style.display = hasSongs ? "inline-flex" : "none";
   $("shuffle-playlist-btn").style.display = playlist.tracks.length > 1 ? "inline-flex" : "none";
@@ -355,6 +356,17 @@ export function initViews(): void {
   });
 
   $("play-playlist-btn").addEventListener("click", () => void playPlaylist(currentView));
+  $("rename-playlist-btn").addEventListener("click", () => {
+    const playlist = getPlaylists()[currentView];
+    if (!playlist) return;
+    const name = prompt("Rename playlist", playlist.name);
+    if (name === null || !name.trim() || name.trim() === playlist.name) return;
+    if (name.trim() === LIKED_NAME) {
+      bus.emit("toast", `"${LIKED_NAME}" is used for your likes`);
+      return;
+    }
+    if (renamePlaylist(playlist.id, name)) bus.emit("toast", `Renamed to "${name.trim()}"`);
+  });
   // The same shuffle setting as in Now Playing, not a separate action.
   $("shuffle-playlist-btn").addEventListener("click", () => {
     toggleShuffle();

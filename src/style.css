@@ -3054,3 +3054,96 @@ body.np-open {
   margin: 6px 0;
   padding-left: 18px;
 }
+
+/* --- Taps: no blue flash or text selection, a soft press instead ------------ */
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+input,
+textarea,
+[contenteditable],
+.lyrics-body p,
+.choice-info {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+button,
+a,
+.card,
+.mix-card,
+.playlist-row,
+.queue-row,
+.player-bar,
+.player {
+  transition-property: transform, opacity, background-color, color, border-color;
+  transition-duration: 0.12s;
+}
+
+/* (Not buttons that are already moved with transform: they'd jump.) */
+button:not(.row-arrow):not(.play-overlay):not(.add-overlay):not(.mix-play):not(.queue-handle):active,
+.mix-card:active,
+.card:active {
+  transform: scale(0.97);
+}
+
+.play-overlay:active,
+.add-overlay:active,
+.mix-play:active {
+  opacity: 0.8;
+}
+
+.playlist-row:active,
+.queue-row:active,
+.choice-option:active,
+.popover-action:active,
+.popover-item:active,
+.sidebar-link:active,
+.playlist-nav-item:active {
+  background-color: var(--glass-bg);
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* --- Update available ------------------------------------------------------- */
+
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  color: #fff;
+  text-decoration: none;
+  font-size: 13px;
+  line-height: 1.35;
+  box-shadow: var(--glass-shadow);
+}
+
+.update-banner small {
+  opacity: 0.85;
+}
+
+.update-icon {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+}

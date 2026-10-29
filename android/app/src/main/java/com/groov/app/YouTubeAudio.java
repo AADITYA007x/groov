@@ -253,6 +253,12 @@ final class YouTubeAudio {
         return thumb;
     }
 
+    /** Title, channel, length and picture of one video (a shared link). */
+    RadioTrack videoInfo(String videoId) throws Exception {
+        StreamInfo info = StreamInfo.getInfo(ServiceList.YouTube, "https://www.youtube.com/watch?v=" + videoId);
+        return new RadioTrack(videoId, info.getName(), info.getUploaderName(), info.getDuration(), bestThumb(info.getThumbnails()));
+    }
+
     boolean isCached(Track track) {
         String videoId = knownVideoId(track.key);
         return videoId != null && findCached(videoId) != null;

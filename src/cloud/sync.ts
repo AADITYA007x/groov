@@ -53,6 +53,10 @@ async function run(op: Op, me: Account): Promise<DbError | null> {
       const { error } = await supabase.from("playlists").insert({ id: op.id, name: op.name });
       return error?.code === "23505" ? null : error; // already created
     }
+    case "renamePlaylist": {
+      const { error } = await supabase.from("playlists").update({ name: op.name }).eq("id", op.id);
+      return error;
+    }
     case "deletePlaylist": {
       const { error } = await supabase.from("playlists").delete().eq("id", op.id);
       return error;

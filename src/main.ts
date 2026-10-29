@@ -29,6 +29,7 @@ import { initFollows } from "./library/follows";
 import { initFollowsUi } from "./ui/follows-ui";
 import { initDownloads } from "./library/downloads";
 import { initSmart } from "./library/smart";
+import { initUpdate } from "./ui/update";
 
 // Order matters for the document-level click handlers: play buttons first,
 // then add-to-playlist, then the plain card click (see ui/popover.ts).
@@ -53,6 +54,7 @@ initFollows();
 initFollowsUi();
 initDownloads();
 initSmart();
+initUpdate();
 initSettings();
 initAccount();
 initSync();

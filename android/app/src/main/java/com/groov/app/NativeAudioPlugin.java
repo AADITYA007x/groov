@@ -600,6 +600,36 @@ public class NativeAudioPlugin extends Plugin {
         });
     }
 
+    /** A shared link's song: {videoId} → {videoId, title, artist, durationSec, artwork}, or {spotify: url} → {id, title, artists, durationMs}. */
+    @PluginMethod
+    public void linkInfo(PluginCall call) {
+        String videoId = call.getString("videoId", "");
+        String spotify = call.getString("spotify", "");
+        radioWorker.execute(() -> {
+            try {
+                JSObject o = new JSObject();
+                if (!spotify.isEmpty()) {
+                    SpotifyImport.Song s = SpotifyImport.fetchTrack(spotify);
+                    o.put("id", s.id);
+                    o.put("title", s.title);
+                    o.put("artists", s.artists);
+                    o.put("durationMs", s.durationMs);
+                } else {
+                    YouTubeAudio.RadioTrack t = youtube.videoInfo(videoId);
+                    o.put("videoId", t.videoId);
+                    o.put("title", t.title);
+                    o.put("artist", t.uploader);
+                    o.put("durationSec", t.durationSec);
+                    o.put("artwork", t.thumbnail);
+                }
+                call.resolve(o);
+            } catch (Exception e) {
+                String msg = e.getMessage();
+                call.reject(msg != null && !msg.isEmpty() ? msg : YouTubeAudio.describe(e));
+            }
+        });
+    }
+
     /** A public Spotify playlist/album: {url} → {name, cover, songs: [{id, title, artists, durationMs}]}. */
     @PluginMethod
     public void importSpotify(PluginCall call) {

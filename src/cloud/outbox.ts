@@ -8,6 +8,7 @@ import { isSignedIn } from "./session";
 export type Op =
   | { type: "createPlaylist"; id: string; name: string }
   | { type: "deletePlaylist"; id: string }
+  | { type: "renamePlaylist"; id: string; name: string }
   | { type: "leavePlaylist"; id: string }
   | { type: "addTrack"; playlistId: string; track: Item; position: number }
   | { type: "removeTrack"; playlistId: string; trackKey: string }

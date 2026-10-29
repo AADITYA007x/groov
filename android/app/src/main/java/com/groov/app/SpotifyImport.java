@@ -47,6 +47,30 @@ final class SpotifyImport {
     }
 
     private static final Pattern LINK = Pattern.compile("(playlist|album)[/:]([A-Za-z0-9]{16,})");
+    private static final Pattern TRACK = Pattern.compile("track[/:]([A-Za-z0-9]{16,})");
+
+    /** One shared Spotify song: its name and artists (to find it on YouTube Music). */
+    static Song fetchTrack(String link) throws Exception {
+        Matcher m = TRACK.matcher(link);
+        if (!m.find()) throw new IOException("That doesn't look like a Spotify song link");
+        String id = m.group(1);
+        JSONObject entity = findEntity(get("https://open.spotify.com/embed/track/" + id));
+        if (entity == null) throw new IOException("Spotify didn't share this song");
+        String title = entity.optString("name", entity.optString("title", ""));
+        StringBuilder artists = new StringBuilder();
+        JSONArray list = entity.optJSONArray("artists");
+        if (list != null) {
+            for (int i = 0; i < list.length(); i++) {
+                String name = list.optJSONObject(i) != null ? list.optJSONObject(i).optString("name", "") : "";
+                if (name.isEmpty()) continue;
+                if (artists.length() > 0) artists.append(", ");
+                artists.append(name);
+            }
+        }
+        if (artists.length() == 0) artists.append(entity.optString("subtitle", "").replace('\u00a0', ' '));
+        if (title.isEmpty()) throw new IOException("No song found at this link");
+        return new Song(id, title, artists.toString().trim(), entity.optLong("duration", 0));
+    }
     /** The page has used three ways to carry its data over the years. */
     private static final Pattern NEXT_DATA = Pattern.compile("<script[^>]*id=\"__NEXT_DATA__\"[^>]*>(.+?)</script>", Pattern.DOTALL);
     private static final Pattern BASE64_SCRIPT = Pattern.compile("<script[^>]*id=\"(resource|initial-state)\"[^>]*>([A-Za-z0-9+/=\\s]+)</script>", Pattern.DOTALL);
