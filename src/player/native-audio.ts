@@ -29,6 +29,16 @@ interface NativeAudioPlugin {
   }>;
   eqInfo(): Promise<{ available: boolean; presets: string[]; preset: number; bass: number; bassAvailable: boolean }>;
   setEq(o: { preset?: number; bass?: number }): Promise<void>;
+  linkInfo(o: { videoId?: string; spotify?: string }): Promise<{
+    videoId?: string;
+    title: string;
+    artist?: string;
+    artists?: string;
+    durationSec?: number;
+    durationMs?: number;
+    artwork?: string | null;
+    id?: string;
+  }>;
   storageInfo(): Promise<{ bytes: number; songs: number; limitMb: number; downloadedBytes?: number; downloadedSongs?: number; smartBytes?: number; smartSongs?: number }>;
   smartDownload(o: { tracks: NativeTrack[]; limitMb: number; wifiOnly: boolean }): Promise<void>;
   download(o: { tracks: NativeTrack[] }): Promise<void>;

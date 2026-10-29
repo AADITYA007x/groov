@@ -212,9 +212,13 @@ async function importFromYoutube(): Promise<void> {
     "Paste a playlist link from YouTube, YouTube Music or Spotify.\n(In the app: open the playlist → ⋮ / ··· → Share → Copy link)",
   );
   if (!link?.trim()) return;
+  await importFromLink(link.trim());
+}
+
+/** Import a YouTube / YouTube Music / Spotify playlist or album link. */
+export async function importFromLink(url: string): Promise<void> {
   bus.emit("toast", "⤓ Importing playlist…");
   try {
-    const url = link.trim();
     let name: string;
     let items: Item[];
     if (/spotify\.com|^spotify:/i.test(url)) {
