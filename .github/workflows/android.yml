@@ -101,3 +101,15 @@ jobs:
           files: ${{ steps.apk.outputs.name }}
           make_latest: true
           generate_release_notes: true
+
+      - name: Keep only the newest release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEEP: v${{ steps.apk.outputs.version }}-build${{ github.run_number }}
+        run: |
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName --jq '.[].tagName' |
+            while read -r tag; do
+              [ "$tag" = "$KEEP" ] && continue
+              gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes || true
+            done
