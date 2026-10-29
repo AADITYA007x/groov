@@ -45,7 +45,8 @@ function render(): void {
     list.innerHTML = friends
       .map((f) => {
         const joinedThem = jam.joined?.id === f.id;
-        const canJoin = !joinedThem && Boolean(f.track) && !f.listeningTo;
+        // Only while they're actually playing: joining a paused friend does nothing.
+        const canJoin = !joinedThem && Boolean(f.track) && f.playing && !f.listeningTo;
         const button = joinedThem
           ? `<button class="friend-btn leave" data-leave="1">Leave</button>`
           : canJoin
@@ -82,7 +83,6 @@ export function initFriends(): void {
     if (btn.dataset.leave) void stopListening();
     else if (btn.dataset.join) {
       void listenAlong(btn.dataset.join, btn.dataset.name ?? "your friend");
-      toast(`🎧 Listening along with ${btn.dataset.name}`);
       closeSidebar();
     }
   });

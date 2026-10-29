@@ -61,6 +61,9 @@ let suppressUntil = 0;
 let pendingSync: StateMsg | null = null;
 let loading = false;
 let heartbeat: ReturnType<typeof setInterval> | undefined;
+/** Waiting for the host's first answer after "Listen along". */
+let answerTimer: ReturnType<typeof setTimeout> | undefined;
+const ANSWER_MS = 10000;
 let broadcastTimer: ReturnType<typeof setTimeout> | undefined;
 
 export function getJamInfo(): JamInfo {
@@ -143,7 +146,14 @@ function onMessage(msg: JamMsg, asHost: boolean): void {
   if (!me || msg.from === me.id) return;
   if (msg.type === "hello" && asHost) broadcastState(true);
   else if (msg.type === "command" && asHost) void (msg.cmd === "next" ? playNext() : playPrevious());
-  else if (msg.type === "state") void applyState(msg);
+  else if (msg.type === "state") {
+    if (!asHost && joined && msg.from === joined.id && answerTimer) {
+      clearTimeout(answerTimer);
+      answerTimer = undefined;
+      bus.emit("toast", `🎧 Listening along with ${joined.name}`);
+    }
+    void applyState(msg);
+  }
 }
 
 // --- My own channel (people listening along with me) -------------------------------
@@ -183,6 +193,15 @@ export async function listenAlong(hostId: string, hostName: string): Promise<voi
   });
   joined = { id: hostId, name: hostName, channel };
   lastRemoteAt = 0;
+  bus.emit("toast", `Connecting to ${hostName}…`);
+  // Their phone may be asleep or Groov closed: give up instead of hanging.
+  clearTimeout(answerTimer);
+  answerTimer = setTimeout(() => {
+    answerTimer = undefined;
+    if (joined?.channel !== channel) return;
+    void stopListening(false);
+    bus.emit("toast", `${hostName}'s Groov isn't answering — it may be closed or the phone asleep`);
+  }, ANSWER_MS);
   channel
     .on("broadcast", { event: "jam" }, ({ payload }) => onMessage(payload as JamMsg, false))
     .subscribe((status) => {
@@ -201,6 +220,8 @@ export async function listenAlong(hostId: string, hostName: string): Promise<voi
 }
 
 export async function stopListening(notify = true): Promise<void> {
+  clearTimeout(answerTimer);
+  answerTimer = undefined;
   if (!joined) return;
   const { channel, name } = joined;
   joined = null;

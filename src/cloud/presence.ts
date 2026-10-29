@@ -43,11 +43,18 @@ function myStatus(me: Account): FriendStatus {
   return { id: me.id, name: me.name, track, playing: s.playing, listeningTo, at: Date.now() };
 }
 
+/** Groov in the background with nothing playing: not really "online". */
+function isAway(): boolean {
+  return document.visibilityState === "hidden" && !getSnapshot().playing;
+}
+
 function scheduleUpdate(delay = 800): void {
   clearTimeout(updateTimer);
   updateTimer = setTimeout(() => {
     const me = getAccount();
-    if (me && channel) void channel.track(myStatus(me));
+    if (!me || !channel) return;
+    if (isAway()) void channel.untrack();
+    else void channel.track(myStatus(me));
   }, delay);
 }
 
@@ -80,8 +87,9 @@ export function initPresence(): void {
   bus.on("authchange", (me) => (me ? join(me) : leave()));
   bus.on("trackchange", () => scheduleUpdate());
   bus.on("playstate", () => scheduleUpdate());
-  // Coming back from the background: make sure we're shown as online.
+  // Back in the app: shown as online again. Left with music paused: hidden
+  // from friends after a short while (playing in the background still counts).
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") scheduleUpdate(0);
+    scheduleUpdate(document.visibilityState === "visible" ? 0 : 20000);
   });
 }
