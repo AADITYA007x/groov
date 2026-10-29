@@ -32,10 +32,12 @@ import { initSmart } from "./library/smart";
 import { initUpdate } from "./ui/update";
 import { initShare } from "./ui/share";
 import { initWelcome, openWelcome } from "./ui/welcome";
+import { initEntry } from "./ui/entry";
 
 // Order matters for the document-level click handlers: play buttons first,
 // then add-to-playlist, then the plain card click (see ui/popover.ts).
 initBack();
+initEntry();
 initLayout();
 initTheme();
 initPlayer();

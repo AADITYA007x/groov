@@ -3847,3 +3847,71 @@ button:not(.row-arrow):not(.play-overlay):not(.add-overlay):not(.mix-play):not(.
 .broken-banner {
   background: linear-gradient(135deg, #8a2b2b, #d9822b);
 }
+
+/* --- Sign-in screen ------------------------------------------------------------- */
+
+.entry-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 700;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: calc(16px + var(--safe-top)) 16px calc(16px + var(--safe-bottom));
+  background:
+    radial-gradient(circle at 20% 0%, color-mix(in srgb, var(--accent-1) 35%, transparent), transparent 55%),
+    radial-gradient(circle at 100% 100%, color-mix(in srgb, var(--accent-2) 25%, transparent), transparent 50%),
+    #0b0618;
+  overflow-y: auto;
+}
+
+html.entry .entry-screen {
+  display: flex;
+}
+
+html.entry body > :not(.entry-screen) {
+  visibility: hidden;
+}
+
+.entry-panel {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: rgba(24, 10, 46, 0.86);
+  border: 1px solid var(--glass-border);
+  border-radius: 22px;
+  padding: 28px 20px 20px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+}
+
+.entry-logo {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  align-self: center;
+}
+
+.entry-title {
+  margin: 0;
+  text-align: center;
+  font-size: 26px;
+}
+
+.entry-sub,
+.entry-note {
+  margin: 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.entry-sub {
+  margin-bottom: 6px;
+}
+
+.entry-note {
+  margin-top: 4px;
+}

@@ -7,6 +7,7 @@ import { toItem } from "../player/radio";
 import { bus } from "../state";
 import type { Item } from "../types";
 import { $ } from "../utils";
+import { isEntryOpen } from "./entry";
 import { closeSidebar } from "./layout";
 import { importFromLink } from "./views";
 
@@ -88,5 +89,7 @@ function search(text: string): void {
 
 export function initShare(): void {
   if (!hasNativeAudio) return;
-  window.groovShare = (text: string) => void handleShared(text);
+  window.groovShare = (text: string) => {
+    if (!isEntryOpen()) void handleShared(text);
+  };
 }

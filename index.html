@@ -9,8 +9,33 @@
     <link rel="icon" href="./favicon-32.png" sizes="32x32" type="image/png" />
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <link rel="manifest" href="./manifest.webmanifest" />
+    <script>
+      try {
+        if (!localStorage.getItem("groov:auth")) document.documentElement.classList.add("entry");
+      } catch (e) {
+        document.documentElement.classList.add("entry");
+      }
+    </script>
   </head>
   <body>
+    <div id="entry-screen" class="entry-screen" role="dialog" aria-label="Sign in to Groov">
+      <form id="entry-form" class="entry-panel" autocomplete="on">
+        <img src="./favicon.svg" alt="" class="entry-logo" />
+        <h1 class="entry-title">Groov</h1>
+        <p class="entry-sub">Groov is private. Sign in with the account Aaditya made for you.</p>
+        <label class="field">
+          <span>Email</span>
+          <input id="entry-email" type="email" required autocomplete="email" inputmode="email" />
+        </label>
+        <label class="field">
+          <span>Password</span>
+          <input id="entry-password" type="password" required minlength="6" autocomplete="current-password" />
+        </label>
+        <p id="entry-error" class="dialog-error" style="display: none"></p>
+        <button id="entry-submit" type="submit" class="dialog-primary">Sign in</button>
+        <p class="entry-note">No account? Ask Aaditya for one.</p>
+      </form>
+    </div>
     <div class="bg-blur" id="bg-blur"></div>
     <div class="bg-gradient"></div>
 
@@ -333,7 +358,7 @@
         </label>
         <p id="account-error" class="dialog-error" style="display: none"></p>
         <button id="account-submit" type="submit" class="dialog-primary">Sign in</button>
-        <button id="account-switch" type="button" class="text-btn dialog-switch">New here? Create an account</button>
+        <button id="account-switch" type="button" class="text-btn dialog-switch" hidden>New here? Create an account</button>
         <button id="account-cancel" type="button" class="dialog-close" aria-label="Close">✕</button>
       </form>
     </div>

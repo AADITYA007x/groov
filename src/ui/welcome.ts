@@ -8,6 +8,7 @@ import { bus } from "../state";
 import { storage } from "../utils";
 import { openAccount } from "./account";
 import { pushStep, removeStep } from "./back";
+import { isEntryOpen } from "./entry";
 
 const SEEN_KEY = "groov:welcome-seen";
 const KEY_GUIDE_KEY = "groov:key-guide-dismissed";
@@ -48,14 +49,12 @@ export async function openWelcome(): Promise<void> {
 
   const account = step(
     1,
-    signedIn ? `Signed in as ${getAccount()!.name}` : "Sign in, or create your account",
+    signedIn ? `Signed in as ${getAccount()!.name}` : "Sign in",
     signedIn
-      ? `<p>Your playlists, likes, follows and history sync across your devices.</p>`
-      : `<p><b>Already have an account?</b> Sign in with the same email on every device.<br />
-         <b>New here?</b> Create one — it takes 20 seconds, and friends can then share playlists with you.</p>
+      ? `<p>Your playlists, likes, follows and history sync across your devices. Use the same account on all of them.</p>`
+      : `<p>Sign in with the same email on every device.</p>
          <div class="welcome-buttons">
            <button class="welcome-btn primary" data-act="sign-in">Sign in</button>
-           <button class="welcome-btn" data-act="sign-up">Create account</button>
          </div>`,
     signedIn,
   );
@@ -107,10 +106,6 @@ export async function openWelcome(): Promise<void> {
         close();
         openAccount("sign-in");
       });
-      root.querySelector('[data-act="sign-up"]')?.addEventListener("click", () => {
-        close();
-        openAccount("sign-up");
-      });
       root.querySelector('[data-act="background"]')?.addEventListener("click", () => void openBackgroundPlaySettings());
       root.querySelector('[data-act="key-guide"]')?.addEventListener("click", () => openKeyGuide());
     },
@@ -139,8 +134,14 @@ export function openKeyGuide(): void {
 }
 
 export function initWelcome(): void {
-  // First time: once the app has settled.
-  if (!storage.get<boolean>(SEEN_KEY, false)) setTimeout(() => void openWelcome(), 1500);
+  // First time: once the app has settled (and after signing in).
+  const firstTime = () => {
+    if (!storage.get<boolean>(SEEN_KEY, false) && !isEntryOpen()) void openWelcome();
+  };
+  setTimeout(firstTime, 1500);
+  bus.on("authchange", (account) => {
+    if (account) setTimeout(firstTime, 1500);
+  });
   // Laptop: signed in but still no key → offer the key guide once.
   if (!isNativeApp) {
     bus.on("authchange", (account) => {

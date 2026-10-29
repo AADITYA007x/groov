@@ -73,7 +73,7 @@ function close(): void {
 }
 
 /** Supabase's errors, in plain words. */
-function friendly(error: unknown): string {
+export function friendly(error: unknown): string {
   const msg = (error as Error)?.message || String(error);
   if (/invalid login credentials/i.test(msg)) return "Wrong email or password.";
   if (/already registered|already exists/i.test(msg)) return "That email already has an account. Sign in instead.";
@@ -91,7 +91,7 @@ export function initAccount(): void {
       open();
       return;
     }
-    if (!confirm("Sign out? Your synced playlists stay in your account and come back when you sign in.")) return;
+    if (!confirm("Sign out? You'll need to sign in again to use Groov. Your playlists stay in your account.")) return;
     await signOut();
   });
 
