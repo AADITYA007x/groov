@@ -1,0 +1,115 @@
+name: Check for NewPipe updates
+
+# Groov gets full songs from YouTube through NewPipeExtractor. When YouTube
+# changes its site, NewPipe releases a fix and Groov needs that version.
+#
+# Every Monday this checks for a NewPipe release newer than the one Groov
+# uses. If there is one, it:
+#   1. puts the new version on a branch "newpipe-<version>",
+#   2. builds a test APK from it (see the Actions tab),
+#   3. opens an issue (GitHub emails you) with what to do.
+#
+# Groov broken and no new release yet? Run this by hand (Actions → "Check
+# for NewPipe updates" → Run workflow) and choose "dev": it uses NewPipe's
+# very latest fixes, which usually land there days before a release.
+on:
+  schedule:
+    - cron: "17 4 * * 1" # Mondays, 09:47 India time
+  workflow_dispatch:
+    inputs:
+      track:
+        description: "release = newest official release · dev = newest fixes (when Groov is broken)"
+        type: choice
+        options: [release, dev]
+        default: release
+
+permissions:
+  contents: write
+  issues: write
+  actions: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      UPSTREAM: TeamNewPipe/NewPipeExtractor
+      TRACK: ${{ inputs.track || 'release' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compare versions
+        id: v
+        run: |
+          set -euo pipefail
+          CURRENT=$(grep -oP 'com\.github\.TeamNewPipe:NewPipeExtractor:\K[^"]+' android/app/build.gradle)
+          if [ "$TRACK" = "dev" ]; then
+            CANDIDATE=$(gh api "repos/$UPSTREAM/commits/dev" --jq .sha)
+            LABEL="dev-${CANDIDATE:0:7}"
+          else
+            CANDIDATE=$(gh api "repos/$UPSTREAM/releases/latest" --jq .tag_name)
+            LABEL="$CANDIDATE"
+          fi
+          CUR_DATE=$(gh api "repos/$UPSTREAM/commits/$CURRENT" --jq .commit.committer.date)
+          NEW_DATE=$(gh api "repos/$UPSTREAM/commits/$CANDIDATE" --jq .commit.committer.date)
+          echo "Groov uses $CURRENT ($CUR_DATE); newest $TRACK is $CANDIDATE ($NEW_DATE)"
+          BRANCH="newpipe-$LABEL"
+          NEWER=false
+          if [ "$CANDIDATE" != "$CURRENT" ] && [[ "$NEW_DATE" > "$CUR_DATE" ]]; then NEWER=true; fi
+          # Already proposed? Don't open it twice.
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then NEWER=false; echo "Already proposed on $BRANCH"; fi
+          {
+            echo "current=$CURRENT"; echo "candidate=$CANDIDATE"; echo "label=$LABEL"
+            echo "branch=$BRANCH"; echo "newer=$NEWER"; echo "new_date=$NEW_DATE"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Put the new version on a branch
+        if: steps.v.outputs.newer == 'true'
+        run: |
+          set -euo pipefail
+          git config user.name "groov-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "${{ steps.v.outputs.branch }}" origin/main
+          sed -i "s#com.github.TeamNewPipe:NewPipeExtractor:${{ steps.v.outputs.current }}#com.github.TeamNewPipe:NewPipeExtractor:${{ steps.v.outputs.candidate }}#" android/app/build.gradle
+          git commit -am "Update NewPipeExtractor to ${{ steps.v.outputs.label }}"
+          git push origin "${{ steps.v.outputs.branch }}"
+
+      - name: Build a test APK
+        if: steps.v.outputs.newer == 'true'
+        run: gh workflow run android.yml --ref "${{ steps.v.outputs.branch }}"
+
+      - name: Open an issue (GitHub emails you)
+        if: steps.v.outputs.newer == 'true'
+        run: |
+          REPO="${{ github.repository }}"
+          BRANCH="${{ steps.v.outputs.branch }}"
+          cat > body.md <<EOF
+          A newer NewPipe (the part that gets full songs from YouTube) is available: **${{ steps.v.outputs.label }}** (${{ steps.v.outputs.new_date }}).
+
+          **If Groov works fine right now**, you can ignore this until something breaks — or update anyway, it usually brings fixes.
+
+          **To update (no coding):**
+          1. Wait ~10 minutes, then open the test build: https://github.com/$REPO/actions/workflows/android.yml?query=branch%3A$BRANCH
+          2. Open the newest run → **Artifacts** → download the APK → install it over Groov.
+          3. Play a few songs you haven't played before (search for new ones).
+          4. Works? Open https://github.com/$REPO/compare/main...$BRANCH → **Create pull request** → **Merge**. That publishes it as the new Groov version, and the app will show "update available".
+          5. Doesn't work? Close this issue and try again next week, or ask for help.
+          EOF
+          gh issue create --repo "$REPO" --title "NewPipe update available: ${{ steps.v.outputs.label }}" --body-file body.md
+
+      - name: Keep this weekly check alive
+        # GitHub pauses scheduled checks after 60 days without repo activity.
+        run: |
+          set -euo pipefail
+          LAST=$(git log -1 --format=%ct origin/main)
+          if [ $(( $(date +%s) - LAST )) -gt $(( 45 * 86400 )) ]; then
+            git config user.name "groov-bot"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git checkout -B main origin/main
+            date -u +%FT%TZ > .github/last-check
+            git add .github/last-check
+            git commit -m "Weekly check: still alive"
+            git push origin main
+          fi

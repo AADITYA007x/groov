@@ -16,6 +16,7 @@
 import { loadYoutubeIframeApi, resolveVideoId } from "../api/youtube";
 import { shareVideoId } from "../cloud/shared";
 import { fillMissingArtwork } from "../library/playlists";
+import { reportPlayFailure, reportPlaySuccess } from "./health";
 import { bus, trackRegistry } from "../state";
 import type { Item } from "../types";
 import { $, storage } from "../utils";
@@ -663,6 +664,7 @@ export async function playTrack(id: string): Promise<void> {
 
   stopActiveEngine();
   resumeGoesToNext = false;
+  if (!autoSkipping) unplayableInARow = 0; // you picked a song: start counting again
   const previousId = currentTrackId;
   currentTrackId = id;
   if (previousId) bus.emit("playstate", false);
@@ -680,6 +682,7 @@ export async function playTrack(id: string): Promise<void> {
       nativeVideoId = videoId ?? null;
       if (videoId) shareVideoId(item.id, videoId);
       unplayableInARow = 0;
+      reportPlaySuccess();
       if (videoId && !item.artwork) {
         // Imported from Spotify (no pictures): use the YouTube thumbnail.
         item.artwork = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
@@ -694,6 +697,7 @@ export async function playTrack(id: string): Promise<void> {
       bus.emit("loading", false);
       console.warn("Native playback failed, falling back:", err);
       lastNativeError = (err as Error)?.message || String(err);
+      reportPlayFailure(id, lastNativeError);
     }
   }
 
@@ -722,6 +726,8 @@ export async function playTrack(id: string): Promise<void> {
 // saved): don't just stop — say so and go on to the next one. After 3 in a
 // row it stops (probably no internet), so it never loops through everything.
 let unplayableInARow = 0;
+/** True while moving on from an unplayable song (not a tap by you). */
+let autoSkipping = false;
 
 function skipUnplayable(item: Item): void {
   onPlaybackPaused();
@@ -735,7 +741,9 @@ function skipUnplayable(item: Item): void {
   bus.emit("toast", `Couldn't play "${item.name}" — skipping`);
   const id = item.id;
   setTimeout(() => {
-    if (currentTrackId === id) void playNextInQueue();
+    if (currentTrackId !== id) return;
+    autoSkipping = true;
+    void playNextInQueue().finally(() => (autoSkipping = false));
   }, 1200);
 }
 

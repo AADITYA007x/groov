@@ -5,6 +5,7 @@
 import { isNativeApp } from "../player/media-controls";
 import { bus } from "../state";
 import { $, storage } from "../utils";
+import { isYoutubeBroken } from "../player/health";
 
 const LATEST = "https://api.github.com/repos/AADITYA007x/groov/releases/latest";
 const CHECK_KEY = "groov:update-check";
@@ -61,8 +62,14 @@ function maybeCheck(): void {
   if (!last || Date.now() - last.at > EVERY) void checkNow();
 }
 
+function renderHealth(): void {
+  $("broken-banner").style.display = isYoutubeBroken() ? "flex" : "none";
+}
+
 export function initUpdate(): void {
   if (!isNativeApp) return;
+  renderHealth();
+  bus.on("healthchange", renderHealth);
   render(storage.get<Check | null>(CHECK_KEY, null));
   setTimeout(maybeCheck, 8000);
   document.addEventListener("visibilitychange", () => {

@@ -65,4 +65,6 @@ export const bus = createEmitter<{
   downloadchange: void;
   /** The playing song got a picture (it had none). */
   artworkchange: Item;
+  /** YouTube looks broken for Groov (or fine again). */
+  healthchange: void;
 }>();

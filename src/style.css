@@ -3843,3 +3843,7 @@ button:not(.row-arrow):not(.play-overlay):not(.add-overlay):not(.mix-play):not(.
   align-items: center;
   justify-content: center;
 }
+
+.broken-banner {
+  background: linear-gradient(135deg, #8a2b2b, #d9822b);
+}
