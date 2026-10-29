@@ -12,13 +12,14 @@ import { isLikedPlaylist, LIKED_NAME } from "../library/liked";
 import { renderStats } from "./stats";
 import { canDownload, downloadPlaylist, isPlaylistDownloaded, playlistProgress, removePlaylistDownload, retryFailed } from "../library/downloads";
 import { chooseOption } from "./choice";
+import { icons } from "./icons";
 
 function renderShuffleToggle(): void {
   const btn = $("shuffle-playlist-btn");
   const on = isShuffleOn();
   btn.classList.toggle("active", on);
   btn.setAttribute("aria-pressed", String(on));
-  btn.textContent = on ? "🔀 Shuffle on" : "🔀 Shuffle";
+  btn.title = on ? "Shuffle on" : "Shuffle off";
 }
 import type { Item, Playlist } from "../types";
 import { bus } from "../state";
@@ -165,7 +166,8 @@ function renderPlaylistView(id: string): void {
     navigateToSearch();
     return;
   }
-  playlistViewTitle.textContent = isLikedPlaylist(playlist) ? `❤️ ${playlist.name}` : playlist.name;
+  playlistViewTitle.textContent = playlist.name;
+  renderCover(playlist);
   renderPlaylistMeta(playlist);
   playlistEmptyEl.style.display = playlist.tracks.length ? "none" : "block";
   const me = getAccount()?.id;
@@ -175,6 +177,24 @@ function renderPlaylistView(id: string): void {
       return playlistRowMarkup(id, item, by && by.id !== me ? by.name : undefined);
     })
     .join("");
+}
+
+/** Up to 4 song pictures as the cover; ♥ for Liked Songs. */
+function renderCover(playlist: Playlist): void {
+  const cover = $("playlist-cover");
+  const liked = isLikedPlaylist(playlist);
+  const arts = [...new Set(playlist.tracks.map((t) => t.artwork).filter(Boolean) as string[])].slice(0, 4);
+  cover.className = `playlist-cover${liked ? " liked" : ""}${arts.length >= 4 ? " grid" : ""}`;
+  cover.innerHTML = liked
+    ? icons.heartFilled
+    : arts.length >= 4
+      ? arts.map((a) => `<img src="${escapeHtml(a)}" alt="" loading="lazy" />`).join("")
+      : arts[0]
+        ? `<img src="${escapeHtml(arts[0])}" alt="" />`
+        : `<span class="playlist-cover-note">♪</span>`;
+  const mins = Math.round(playlist.tracks.reduce((sum, t) => sum + (t.durationMs ?? 0), 0) / 60000);
+  const n = playlist.tracks.length;
+  $("playlist-count").textContent = `${n} song${n === 1 ? "" : "s"}${mins ? ` · ${mins >= 60 ? `${Math.floor(mins / 60)} h ${mins % 60} min` : `${mins} min`}` : ""}`;
 }
 
 /** "Shared with Neha" / "Shared by Neha", Share / Delete / Leave buttons. */
@@ -260,13 +280,15 @@ function renderDownloadBtn(playlist: Playlist): void {
   const on = isPlaylistDownloaded(playlist.id);
   const { done, total, failed } = playlistProgress(playlist);
   downloadBtn.classList.toggle("active", on);
-  downloadBtn.textContent = !on
-    ? "⬇ Download"
-    : done >= total
-      ? "✓ Downloaded"
-      : failed && done + failed >= total
-        ? `⬇ ${done}/${total} · retry`
-        : `⬇ ${done}/${total}…`;
+  const complete = on && done >= total;
+  downloadBtn.innerHTML = (complete ? icons.downloaded : icons.download) + `<span class="download-label"></span>`;
+  downloadBtn.classList.toggle("has-label", on && !complete);
+  downloadBtn.title = !on ? "Download for offline" : complete ? "Downloaded · tap to remove" : "Downloading…";
+  downloadBtn.querySelector(".download-label")!.textContent = !on || complete
+    ? ""
+    : failed && done + failed >= total
+      ? `${done}/${total} · retry`
+      : `${done}/${total}`;
 }
 
 export function navigateToPlaylist(id: string, record = true): void {
@@ -360,6 +382,21 @@ export function initViews(): void {
   });
 
   $("play-playlist-btn").addEventListener("click", () => void playPlaylist(currentView));
+  // ⋯: Rename / Share / Delete (whichever this playlist allows).
+  $("playlist-more-btn").addEventListener("click", async () => {
+    const options = (
+      [
+        ["rename-playlist-btn", "✏️ Rename"],
+        ["share-playlist-btn", "👥 Share with a friend"],
+        ["delete-playlist-btn", deleteBtn.textContent === "Leave playlist" ? "🚪 Leave playlist" : "🗑 Delete playlist"],
+      ] as const
+    )
+      .filter(([id]) => $(id).style.display !== "none")
+      .map(([id, label]) => ({ label, value: id as string, danger: id === "delete-playlist-btn" }));
+    if (!options.length) return;
+    const choice = await chooseOption(playlistViewTitle.textContent ?? "Playlist", options);
+    if (choice) $(choice).click();
+  });
   $("rename-playlist-btn").addEventListener("click", () => {
     const playlist = getPlaylists()[currentView];
     if (!playlist) return;

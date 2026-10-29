@@ -45,8 +45,23 @@ export function goBack(): boolean {
 
 // --- Browser back button (laptop / web) -------------------------------------------
 
+let syncPending = false;
+
+/**
+ * Settle the browser history once, after the current changes: closing one
+ * sheet and opening another in the same moment must not touch history
+ * (a back() racing a pushState() could leave the page).
+ */
 function syncTrap(): void {
-  if (!isWeb) return;
+  if (!isWeb || syncPending) return;
+  syncPending = true;
+  setTimeout(() => {
+    syncPending = false;
+    applyTrap();
+  }, 0);
+}
+
+function applyTrap(): void {
   if (steps.length && !trapArmed) {
     history.pushState({ groovBack: true }, "");
     trapArmed = true;

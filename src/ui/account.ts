@@ -53,8 +53,14 @@ function showError(message: string): void {
   errorEl.style.display = message ? "block" : "none";
 }
 
-function open(): void {
-  setMode("sign-in");
+/** Open the sign-in (or create-account) dialog. */
+export function openAccount(start: "sign-in" | "sign-up" = "sign-in"): void {
+  if (getAccount()) return;
+  open(start);
+}
+
+function open(start: "sign-in" | "sign-up" = "sign-in"): void {
+  setMode(start);
   dialog.style.display = "flex";
   pushStep("account", close);
   setTimeout(() => emailInput.focus(), 50);

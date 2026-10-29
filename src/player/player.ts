@@ -207,7 +207,11 @@ function initNativeEngine(): void {
     if (activeEngine !== "native") return;
     console.warn("Native playback error:", message);
     nativePlaying = false;
-    onPlaybackPaused();
+    lastNativeError = message || "Playback error";
+    // The song file broke mid-way: move on rather than going silent.
+    const item = currentTrackId ? trackRegistry.get(currentTrackId) : undefined;
+    if (item) skipUnplayable(item);
+    else onPlaybackPaused();
   });
 }
 
@@ -611,6 +615,10 @@ function maybeCrossfade(): void {
       cancelHandover();
       currentTrackId = next.id;
       nativeVideoId = videoId ?? null;
+      if (videoId && !next.artwork) {
+        next.artwork = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+        fillMissingArtwork(next.id, videoId);
+      }
       nativePosition = 0;
       nativePositionAt = Date.now();
       nativeDuration = 0;
@@ -671,6 +679,7 @@ export async function playTrack(id: string): Promise<void> {
       if (cancelled || currentTrackId !== id) return;
       nativeVideoId = videoId ?? null;
       if (videoId) shareVideoId(item.id, videoId);
+      unplayableInARow = 0;
       if (videoId && !item.artwork) {
         // Imported from Spotify (no pictures): use the YouTube thumbnail.
         item.artwork = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
@@ -705,8 +714,29 @@ export async function playTrack(id: string): Promise<void> {
     audio.currentTime = 0;
     audio.play().catch(() => onPlaybackPaused());
   } else {
-    onPlaybackPaused();
+    skipUnplayable(item);
   }
+}
+
+// A song that can't be played anywhere (no match, blocked, offline and not
+// saved): don't just stop — say so and go on to the next one. After 3 in a
+// row it stops (probably no internet), so it never loops through everything.
+let unplayableInARow = 0;
+
+function skipUnplayable(item: Item): void {
+  onPlaybackPaused();
+  unplayableInARow++;
+  const online = navigator.onLine !== false;
+  if (unplayableInARow > 3 || !online) {
+    bus.emit("toast", online ? `Couldn't play "${item.name}"` : "No internet — play a downloaded song");
+    unplayableInARow = 0;
+    return;
+  }
+  bus.emit("toast", `Couldn't play "${item.name}" — skipping`);
+  const id = item.id;
+  setTimeout(() => {
+    if (currentTrackId === id) void playNextInQueue();
+  }, 1200);
 }
 
 function emitProgressReset(): void {

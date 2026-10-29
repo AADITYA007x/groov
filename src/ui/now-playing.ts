@@ -32,6 +32,21 @@ import { pushStep, removeStep } from "./back";
 import { openArtist } from "./views";
 import { artistLinksMarkup } from "./cards";
 import { isLiked, toggleLike } from "../library/liked";
+import { icons, type IconName } from "./icons";
+
+/** Buttons marked data-icon="…" in the HTML get their SVG icon (kept labels). */
+function fillIcons(): void {
+  document.querySelectorAll<HTMLElement>("[data-icon]").forEach((el) => {
+    const icon = icons[el.dataset.icon as IconName];
+    if (icon && !el.querySelector("svg")) el.insertAdjacentHTML("afterbegin", icon);
+  });
+}
+
+function setIcon(el: HTMLElement, name: IconName): void {
+  const label = el.querySelector("span");
+  el.innerHTML = icons[name];
+  if (label) el.appendChild(label);
+}
 
 const bar = $("player-bar");
 const barArt = $<HTMLImageElement>("player-art");
@@ -53,6 +68,7 @@ const npToggle = $("np-toggle");
 const npVideoBtn = $("np-video");
 const npLabel = document.querySelector<HTMLElement>(".np-label")!;
 const ytHost = $("yt-host");
+const miniFill = $("player-mini-fill");
 
 let currentItem: Item | null = null;
 let videoMode = false;
@@ -64,7 +80,7 @@ const isOpen = () => np.style.display !== "none";
 
 function renderTrack(item: Item): void {
   currentItem = item;
-  bar.style.display = "flex";
+  bar.style.display = "grid";
   document.body.classList.add("has-player");
 
   const small = hiResArtwork(item.artwork, 200) || "";
@@ -84,14 +100,14 @@ function renderTrack(item: Item): void {
 
 function renderPlayState(playing: boolean): void {
   for (const btn of [barToggle, npToggle]) {
-    btn.textContent = playing ? "⏸" : "▶";
+    setIcon(btn, playing ? "pause" : "play");
     btn.setAttribute("aria-label", playing ? "Pause" : "Play");
   }
   np.classList.toggle("playing", playing);
 
   // Play buttons on cards and playlist rows.
   document.querySelectorAll<HTMLElement>(".play-overlay.is-playing, .playlist-row-play.is-playing").forEach((b) => {
-    b.textContent = "▶";
+    b.innerHTML = icons.play;
     b.classList.remove("is-playing");
     b.setAttribute("aria-label", "Play");
   });
@@ -101,7 +117,7 @@ function renderPlayState(playing: boolean): void {
     document
       .querySelectorAll<HTMLElement>(`.play-overlay[data-id="${sel}"], .playlist-row-play[data-id="${sel}"]`)
       .forEach((b) => {
-        b.textContent = "⏸";
+        b.innerHTML = icons.pause;
         b.classList.add("is-playing");
         b.setAttribute("aria-label", "Pause");
       });
@@ -120,6 +136,7 @@ function renderTimes(elapsed: number, duration: number): void {
 function renderProgress(currentTime: number, duration: number): void {
   const ratio = duration > 0 ? currentTime / duration : 0;
   seekBars.forEach((s) => s.set(ratio));
+  miniFill.style.transform = `scaleX(${Math.min(1, Math.max(0, ratio))})`;
   if (!seekBars.some((s) => s.isDragging())) renderTimes(currentTime, duration);
 }
 
@@ -162,13 +179,14 @@ const ENGINE_LABELS = {
 } as const;
 
 function renderModes(): void {
-  const shuffleBtn = $("np-shuffle");
-  const repeatBtn = $("np-repeat");
   const repeat = getRepeatMode();
-  shuffleBtn.classList.toggle("active", isShuffleOn());
-  repeatBtn.classList.toggle("active", repeat !== "off");
-  repeatBtn.textContent = repeat === "one" ? "🔂" : "🔁";
-  repeatBtn.title = repeat === "one" ? "Repeat this song" : repeat === "all" ? "Repeat all" : "Repeat off";
+  for (const id of ["np-shuffle", "player-shuffle"]) $(id).classList.toggle("active", isShuffleOn());
+  for (const id of ["np-repeat", "player-repeat"]) {
+    const repeatBtn = $(id);
+    repeatBtn.classList.toggle("active", repeat !== "off");
+    setIcon(repeatBtn, repeat === "one" ? "repeatOne" : "repeat");
+    repeatBtn.title = repeat === "one" ? "Repeat this song" : repeat === "all" ? "Repeat all" : "Repeat off";
+  }
 }
 
 function renderEngine(): void {
@@ -206,6 +224,7 @@ function close(): void {
 // --- Init ---------------------------------------------------------------------------
 
 export function initNowPlaying(): void {
+  fillIcons();
   const onSeek = (ratio: number) => seekTo(ratio * getDuration());
   const onPreview = (ratio: number) => renderTimes(ratio * getDuration(), getDuration());
   seekBars.push(createSeekBar($("player-seek"), { onSeek, onPreview }));
@@ -226,16 +245,24 @@ export function initNowPlaying(): void {
   $("np-close").addEventListener("click", () => close());
   npVideoBtn.addEventListener("click", () => void setVideoMode(!videoMode));
   $("np-lyrics").addEventListener("click", () => openLyrics());
-  const likeBtn = $("np-like");
+  const likeBtns = [$("np-like"), $("player-like")];
   const renderLike = () => {
     const liked = currentItem ? isLiked(currentItem.id) : false;
-    likeBtn.textContent = liked ? "❤️" : "♡";
-    likeBtn.classList.toggle("liked", liked);
-    likeBtn.setAttribute("aria-label", liked ? "Unlike" : "Like");
+    for (const likeBtn of likeBtns) {
+      setIcon(likeBtn, liked ? "heartFilled" : "heart");
+      likeBtn.classList.toggle("liked", liked);
+      likeBtn.setAttribute("aria-label", liked ? "Unlike" : "Like");
+    }
   };
-  likeBtn.addEventListener("click", () => {
-    if (currentItem) toggleLike(currentItem);
-  });
+  for (const likeBtn of likeBtns) {
+    likeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (currentItem) toggleLike(currentItem);
+    });
+  }
+  $("player-shuffle").addEventListener("click", () => $("np-shuffle").click());
+  $("player-repeat").addEventListener("click", () => $("np-repeat").click());
+  $("player-queue").addEventListener("click", () => $("np-queue").click());
   bus.on("trackchange", () => setTimeout(renderLike, 0));
   bus.on("artworkchange", (item) => renderTrack(item));
   bus.on("likechange", renderLike);

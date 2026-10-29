@@ -3147,3 +3147,699 @@ button:not(.row-arrow):not(.play-overlay):not(.add-overlay):not(.mix-play):not(.
   justify-content: center;
   font-weight: 800;
 }
+
+/* ===========================================================================
+   Final polish: icons, mini player, Now Playing controls
+   =========================================================================== */
+
+.icon {
+  width: 22px;
+  height: 22px;
+  display: block;
+  flex-shrink: 0;
+}
+
+/* Card / row play buttons and ⋯ */
+.play-overlay .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.play-overlay:not(.is-playing) .icon {
+  transform: translateX(1px); /* optical centre of the triangle */
+}
+
+.top-result-card .play-overlay .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.playlist-row-play .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.add-overlay .icon,
+.row-add .icon {
+  width: 18px;
+  height: 18px;
+}
+
+/* --- Mini player ------------------------------------------------------------ */
+
+#player-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+}
+
+#player-bar .player-track {
+  min-width: 0;
+  gap: 12px;
+}
+
+#player-bar .player-meta {
+  gap: 2px;
+}
+
+#player-bar .player-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  max-width: none;
+  flex: none;
+}
+
+#player-bar .player-buttons {
+  gap: 4px;
+}
+
+.player-icon-btn {
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.player-icon-btn:hover {
+  background: var(--glass-bg);
+}
+
+.player-icon-btn.active {
+  color: var(--accent-2-bright);
+}
+
+.player-like.liked,
+.np-like.liked {
+  color: #ff4d6d;
+}
+
+#player-bar .player-play-btn {
+  width: 44px;
+  height: 44px;
+  background: var(--text);
+  color: #120a24;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+#player-bar .player-play-btn .icon {
+  width: 22px;
+  height: 22px;
+}
+
+.player-side {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+/* Thin progress line along the bottom edge (phones). */
+.player-mini-progress {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+#player-mini-fill {
+  height: 100%;
+  width: 100%;
+  transform-origin: left;
+  transform: scaleX(0);
+  background: linear-gradient(90deg, var(--accent-2), var(--accent-2-bright));
+  transition: transform 0.4s linear;
+}
+
+/* Phones: art + title | ♥ | ▶ | ⏭ */
+@media (max-width: 899px) {
+  #player-bar {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    padding: 8px 8px 10px 10px;
+  }
+
+  #player-bar .wide-only,
+  #player-bar .player-prev {
+    display: none;
+  }
+
+  #player-bar .player-side {
+    order: 1; /* ♥ sits right after the song */
+  }
+
+  #player-bar .player-controls {
+    order: 2;
+  }
+
+  #player-bar .player-art {
+    width: 44px;
+    height: 44px;
+  }
+
+  body.has-player .app {
+    padding-bottom: calc(110px + var(--safe-bottom));
+  }
+}
+
+/* Laptops: song | controls + progress | like · lyrics · up next */
+@media (min-width: 900px) {
+  #player-bar {
+    grid-template-columns: minmax(0, 1fr) minmax(380px, 560px) minmax(0, 1fr);
+    gap: 24px;
+    padding: 10px 24px calc(12px + var(--safe-bottom));
+  }
+
+  .player-mini-progress {
+    display: none;
+  }
+
+  #player-bar .player-controls {
+    width: 100%;
+  }
+
+  #player-bar .player-progress {
+    display: flex;
+    width: 100%;
+  }
+
+  #player-bar .player-buttons .player-icon-btn {
+    width: 36px;
+    height: 36px;
+    color: var(--text-muted);
+  }
+
+  #player-bar .player-buttons .player-icon-btn:hover {
+    color: var(--text);
+  }
+
+  #player-bar .player-buttons .player-icon-btn.active {
+    color: var(--accent-2-bright);
+  }
+
+  #player-bar .player-buttons .icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  #player-bar .player-play-btn {
+    width: 40px;
+    height: 40px;
+    margin: 0 6px;
+  }
+
+  #player-bar .player-side .player-icon-btn {
+    color: var(--text-muted);
+  }
+
+  #player-bar .player-side .player-icon-btn:hover,
+  #player-bar .player-side .player-like.liked {
+    color: var(--text);
+  }
+
+  #player-bar .player-side .player-like.liked {
+    color: #ff4d6d;
+  }
+
+  body.has-player .app {
+    padding-bottom: 120px;
+  }
+}
+
+/* The old floating "Aa" button is now a normal icon in the bar. */
+#player-bar .lyrics-toggle-btn {
+  position: static;
+}
+
+/* --- Now Playing controls ---------------------------------------------------- */
+
+.np-icon-btn .icon {
+  width: 22px;
+  height: 22px;
+}
+
+.np-controls {
+  gap: 10px;
+}
+
+.np-skip,
+.np-mode {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+}
+
+.np-skip .icon {
+  width: 30px;
+  height: 30px;
+}
+
+.np-mode {
+  opacity: 0.6;
+  filter: none;
+}
+
+.np-mode .icon {
+  width: 22px;
+  height: 22px;
+}
+
+.np-mode.active {
+  opacity: 1;
+  color: var(--accent-2-bright);
+}
+
+.np-play {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--text);
+  color: #120a24;
+}
+
+.np-play .icon {
+  width: 32px;
+  height: 32px;
+}
+
+.np-play:not(.is-loading) .icon {
+  margin-left: 0;
+}
+
+.np-like {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.np-like .icon {
+  width: 28px;
+  height: 28px;
+}
+
+/* One tidy row of actions: icon + small label. */
+.np-extra {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  flex-wrap: nowrap;
+  width: 100%;
+  max-width: 460px;
+  margin: 0 auto;
+}
+
+.np-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 2px;
+  border: none;
+  border-radius: 14px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.np-action span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.np-action:hover,
+.np-action:active {
+  color: var(--text);
+  background: var(--glass-bg);
+}
+
+.np-action.active {
+  color: var(--accent-2-bright);
+}
+
+/* Loading spinner: hide the icon underneath. */
+.player-play-btn.is-loading .icon,
+.np-play.is-loading .icon {
+  opacity: 0;
+}
+
+.player-play-btn.is-loading::after,
+.np-play.is-loading::after {
+  border-color: rgba(18, 10, 36, 0.25);
+  border-top-color: #120a24;
+}
+
+/* --- Playlist page header ------------------------------------------------------ */
+
+#rename-playlist-btn,
+#share-playlist-btn,
+#delete-playlist-btn {
+  display: none !important; /* reached through ⋯ */
+}
+
+.playlist-hero {
+  display: flex;
+  align-items: flex-end;
+  gap: 18px;
+  margin: 8px 0 16px;
+}
+
+.playlist-cover {
+  width: 132px;
+  height: 132px;
+  flex: 0 0 132px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+
+.playlist-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.playlist-cover.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.playlist-cover.liked {
+  background: linear-gradient(135deg, #4b1d8f, #e14d8a);
+}
+
+.playlist-cover.liked .icon {
+  width: 54px;
+  height: 54px;
+}
+
+.playlist-cover-note {
+  font-size: 48px;
+  opacity: 0.85;
+}
+
+.playlist-hero-info {
+  min-width: 0;
+}
+
+.playlist-title {
+  font-size: 28px;
+  line-height: 1.15;
+  margin: 2px 0 6px;
+  word-break: break-word;
+}
+
+.playlist-count {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.playlist-hero .playlist-meta {
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+
+.playlist-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.hero-play {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  border: none;
+  background: var(--text);
+  color: #120a24;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
+  margin-right: 6px;
+}
+
+.hero-play .icon {
+  width: 26px;
+  height: 26px;
+}
+
+.hero-icon {
+  height: 44px;
+  min-width: 44px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.hero-icon.active {
+  color: var(--accent-2-bright);
+  border-color: var(--accent-2);
+}
+
+.hero-icon .download-label:empty {
+  display: none;
+}
+
+@media (max-width: 480px) {
+  .playlist-cover {
+    width: 112px;
+    height: 112px;
+    flex-basis: 112px;
+  }
+
+  .playlist-title {
+    font-size: 24px;
+  }
+}
+
+/* --- Welcome / setup guide ------------------------------------------------------ */
+
+.welcome-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(2, 3, 10, 0.7);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(16px + var(--safe-top)) 16px calc(16px + var(--safe-bottom));
+}
+
+.welcome-panel {
+  width: 100%;
+  max-width: 460px;
+  max-height: 100%;
+  overflow-y: auto;
+  background: rgba(24, 10, 46, 0.98);
+  border: 1px solid var(--glass-border);
+  border-radius: 22px;
+  padding: 22px 18px 18px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.welcome-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.welcome-head h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.welcome-head p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.welcome-logo {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  flex-shrink: 0;
+}
+
+.welcome-step {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--glass-bg);
+  margin-bottom: 10px;
+}
+
+.welcome-num {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 50%;
+  background: var(--accent-2-bright);
+  color: #120a24;
+  font-weight: 800;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.welcome-step.done .welcome-num {
+  background: #3ddc84;
+}
+
+.welcome-step-body {
+  min-width: 0;
+  font-size: 14px;
+}
+
+.welcome-step-body p,
+.welcome-step-body ul {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.welcome-step-body ul {
+  padding-left: 18px;
+}
+
+.welcome-step-body li + li {
+  margin-top: 4px;
+}
+
+.welcome-step-body a {
+  color: var(--accent-2-bright);
+}
+
+.welcome-step-body code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 1px 5px;
+  border-radius: 5px;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.welcome-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.welcome-btn {
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg-strong);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 13px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.welcome-btn.primary {
+  background: var(--text);
+  color: #120a24;
+  border-color: var(--text);
+}
+
+.welcome-btn.wide {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 13px;
+  font-size: 15px;
+}
+
+/* --- Artist / album / mix page buttons ------------------------------------------ */
+
+.detail-actions {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.detail-play {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 22px 0 18px;
+  background: var(--text);
+  color: #120a24;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+
+.detail-play .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.detail-actions .hero-icon .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.detail-actions .follow-btn {
+  height: 44px;
+  padding: 0 18px;
+}
+
+/* Laptop: the top search result doesn't need to fill half the screen. */
+@media (min-width: 900px) {
+  .top-result-card {
+    max-width: 340px;
+  }
+}
+
+#playlist-view .playlist-actions {
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+}
+
+.detail-actions .follow-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

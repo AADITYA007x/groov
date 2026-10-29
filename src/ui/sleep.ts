@@ -20,7 +20,7 @@ function render(): void {
   const song = isStopAfterCurrent();
   const on = song || endsAt > 0;
   btn.classList.toggle("active", on);
-  btn.textContent = song ? "🌙 End of song" : endsAt ? `🌙 ${minutesLeft()} min` : "🌙 Sleep";
+  btn.querySelector(".np-sleep-label")!.textContent = song ? "End of song" : endsAt ? `${minutesLeft()} min` : "Sleep";
 }
 
 function cancel(): void {

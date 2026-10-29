@@ -9,6 +9,7 @@ export type Op =
   | { type: "createPlaylist"; id: string; name: string }
   | { type: "deletePlaylist"; id: string }
   | { type: "renamePlaylist"; id: string; name: string }
+  | { type: "updateTrack"; playlistId: string; track: Item }
   | { type: "leavePlaylist"; id: string }
   | { type: "addTrack"; playlistId: string; track: Item; position: number }
   | { type: "removeTrack"; playlistId: string; trackKey: string }

@@ -72,6 +72,7 @@
         <button id="crossfade-btn" class="sidebar-setting" style="display: none"></button>
         <button id="smart-btn" class="sidebar-setting" style="display: none"></button>
         <button id="storage-btn" class="sidebar-setting" style="display: none"></button>
+        <button id="help-btn" class="sidebar-setting">❓ Help &amp; setup</button>
         <div id="app-version" class="sidebar-version"></div>
       </aside>
 
@@ -165,9 +166,9 @@
                   <h1 id="detail-title" class="detail-title"></h1>
                   <div id="detail-sub" class="detail-sub"></div>
                   <div class="detail-actions">
-                    <button id="detail-play" class="detail-play">▶ Play</button>
-                    <button id="detail-radio" class="text-btn">📻 Radio</button>
-                    <button id="detail-save" class="text-btn" style="display: none">+ Save as playlist</button>
+                    <button id="detail-play" class="detail-play" data-icon="play"><span>Play</span></button>
+                    <button id="detail-radio" class="hero-icon" data-icon="radio"><span>Radio</span></button>
+                    <button id="detail-save" class="hero-icon" style="display: none" data-icon="addTo"><span>Save</span></button>
                     <button id="detail-follow" class="follow-btn" style="display: none">+ Follow</button>
                   </div>
                 </div>
@@ -176,18 +177,25 @@
             </section>
 
             <section id="playlist-view" style="display: none">
-              <div class="section-header">
-                <h2 id="playlist-view-title" class="section-title"></h2>
-                <div class="playlist-actions">
-                  <button id="play-playlist-btn" class="text-btn">▶ Play</button>
-                  <button id="shuffle-playlist-btn" class="text-btn shuffle-toggle" aria-pressed="false" title="Shuffle">🔀 Shuffle</button>
-                  <button id="download-playlist-btn" class="text-btn download-btn" style="display: none">⬇ Download</button>
-                  <button id="rename-playlist-btn" class="text-btn" style="display: none">Rename</button>
-                  <button id="share-playlist-btn" class="text-btn" style="display: none">Share</button>
-                  <button id="delete-playlist-btn" class="text-btn">Delete playlist</button>
+              <div class="playlist-hero">
+                <div id="playlist-cover" class="playlist-cover"></div>
+                <div class="playlist-hero-info">
+                  <div class="detail-kind">Playlist</div>
+                  <h1 id="playlist-view-title" class="playlist-title"></h1>
+                  <div id="playlist-count" class="playlist-count"></div>
+                  <p id="playlist-meta" class="playlist-meta muted" style="display: none"></p>
                 </div>
               </div>
-              <p id="playlist-meta" class="playlist-meta muted" style="display: none"></p>
+              <div class="playlist-actions">
+                <button id="play-playlist-btn" class="hero-play" aria-label="Play" data-icon="play"></button>
+                <button id="shuffle-playlist-btn" class="hero-icon shuffle-toggle" aria-pressed="false" aria-label="Shuffle" title="Shuffle" data-icon="shuffle"></button>
+                <button id="download-playlist-btn" class="hero-icon download-btn" style="display: none" aria-label="Download" title="Download for offline" data-icon="download"><span class="download-label"></span></button>
+                <button id="playlist-more-btn" class="hero-icon" aria-label="More" title="More" data-icon="more"></button>
+                <!-- Reached through ⋯ -->
+                <button id="rename-playlist-btn" hidden>Rename</button>
+                <button id="share-playlist-btn" hidden>Share</button>
+                <button id="delete-playlist-btn" hidden>Delete playlist</button>
+              </div>
               <div id="playlist-track-list" class="playlist-track-list"></div>
               <p id="playlist-empty" class="muted" style="display: none">
                 This playlist is empty. Search for songs and use "Add to
@@ -202,7 +210,7 @@
     <div id="add-to-playlist-popover" class="popover" style="display: none"></div>
 
     <footer id="player-bar" class="player-bar" style="display: none">
-      <button id="lyrics-toggle-btn" class="lyrics-toggle-btn" aria-label="Show lyrics">Aa</button>
+      <div class="player-mini-progress" aria-hidden="true"><div id="player-mini-fill"></div></div>
       <button id="player-open" class="player-track" aria-label="Open Now Playing">
         <img id="player-art" class="player-art" src="" alt="" />
         <span class="player-meta">
@@ -212,11 +220,13 @@
       </button>
       <div class="player-controls">
         <div class="player-buttons">
-          <button id="player-prev" class="player-skip-btn" aria-label="Previous">⏮</button>
-          <button id="player-toggle" class="player-play-btn" aria-label="Play">▶</button>
-          <button id="player-next" class="player-skip-btn" aria-label="Next">⏭</button>
+          <button id="player-shuffle" class="player-icon-btn wide-only" aria-label="Shuffle" data-icon="shuffle"></button>
+          <button id="player-prev" class="player-icon-btn player-prev" aria-label="Previous" data-icon="prev"></button>
+          <button id="player-toggle" class="player-play-btn" aria-label="Play" data-icon="play"></button>
+          <button id="player-next" class="player-icon-btn" aria-label="Next" data-icon="next"></button>
+          <button id="player-repeat" class="player-icon-btn wide-only" aria-label="Repeat" data-icon="repeat"></button>
         </div>
-        <div class="player-progress">
+        <div class="player-progress wide-only">
           <span id="player-time-elapsed" class="player-time">0:00</span>
           <div id="player-seek" class="seekbar" role="slider" aria-label="Seek" tabindex="0">
             <div class="seekbar-rail"><div class="seekbar-fill"></div></div>
@@ -225,15 +235,20 @@
           <span id="player-time-total" class="player-time">0:00</span>
         </div>
       </div>
+      <div class="player-side">
+        <button id="player-like" class="player-icon-btn player-like" aria-label="Like" data-icon="heart"></button>
+        <button id="lyrics-toggle-btn" class="player-icon-btn wide-only" aria-label="Lyrics" title="Lyrics" data-icon="lyrics"></button>
+        <button id="player-queue" class="player-icon-btn wide-only" aria-label="Up next" title="Up next" data-icon="queue"></button>
+      </div>
     </footer>
 
     <div id="now-playing" class="now-playing" style="display: none" aria-label="Now playing">
       <div id="np-bg" class="np-bg"></div>
       <div class="np-inner">
         <header class="np-top">
-          <button id="np-close" class="np-icon-btn" aria-label="Close">⌄</button>
+          <button id="np-close" class="np-icon-btn" aria-label="Close" data-icon="down"></button>
           <div class="np-label">Now playing</div>
-          <button id="np-video" class="np-icon-btn np-video-btn" aria-label="Show video" title="Show video">🎬</button>
+          <button id="np-video" class="np-icon-btn np-video-btn" aria-label="Show video" title="Show video" data-icon="video"></button>
         </header>
         <div id="np-jam" class="np-jam" style="display: none">
           <span id="np-jam-text"></span>
@@ -247,7 +262,7 @@
             <div id="np-title" class="np-title"></div>
             <div id="np-artist" class="np-artist"></div>
           </div>
-          <button id="np-like" class="np-like" aria-label="Like">♡</button>
+          <button id="np-like" class="np-like" aria-label="Like" data-icon="heart"></button>
         </div>
         <div class="np-progress">
           <div id="np-seek" class="seekbar seekbar-lg" role="slider" aria-label="Seek" tabindex="0">
@@ -257,18 +272,18 @@
           <div class="np-times"><span id="np-elapsed">0:00</span><span id="np-total">0:00</span></div>
         </div>
         <div class="np-controls">
-          <button id="np-shuffle" class="np-mode" aria-label="Shuffle" title="Shuffle">🔀</button>
-          <button id="np-prev" class="np-skip" aria-label="Previous">⏮</button>
-          <button id="np-toggle" class="np-play" aria-label="Play">▶</button>
-          <button id="np-next" class="np-skip" aria-label="Next">⏭</button>
-          <button id="np-repeat" class="np-mode" aria-label="Repeat" title="Repeat">🔁</button>
+          <button id="np-shuffle" class="np-mode" aria-label="Shuffle" title="Shuffle" data-icon="shuffle"></button>
+          <button id="np-prev" class="np-skip" aria-label="Previous" data-icon="prev"></button>
+          <button id="np-toggle" class="np-play" aria-label="Play" data-icon="play"></button>
+          <button id="np-next" class="np-skip" aria-label="Next" data-icon="next"></button>
+          <button id="np-repeat" class="np-mode" aria-label="Repeat" title="Repeat" data-icon="repeat"></button>
         </div>
         <div class="np-extra">
-          <button id="np-lyrics" class="np-pill">Lyrics</button>
-          <button id="np-add" class="np-pill">+ Playlist</button>
-          <button id="np-radio" class="np-pill">📻 Radio</button>
-          <button id="np-queue" class="np-pill">☰ Up next</button>
-          <button id="np-sleep" class="np-pill">🌙 Sleep</button>
+          <button id="np-lyrics" class="np-action" data-icon="lyrics"><span>Lyrics</span></button>
+          <button id="np-add" class="np-action" data-icon="addTo"><span>Save</span></button>
+          <button id="np-radio" class="np-action" data-icon="radio"><span>Radio</span></button>
+          <button id="np-queue" class="np-action" data-icon="queue"><span>Up next</span></button>
+          <button id="np-sleep" class="np-action" data-icon="moon"><span class="np-sleep-label">Sleep</span></button>
         </div>
       </div>
     </div>

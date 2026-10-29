@@ -31,6 +31,7 @@ import { initDownloads } from "./library/downloads";
 import { initSmart } from "./library/smart";
 import { initUpdate } from "./ui/update";
 import { initShare } from "./ui/share";
+import { initWelcome, openWelcome } from "./ui/welcome";
 
 // Order matters for the document-level click handlers: play buttons first,
 // then add-to-playlist, then the plain card click (see ui/popover.ts).
@@ -57,6 +58,8 @@ initDownloads();
 initSmart();
 initUpdate();
 initShare();
+initWelcome();
+document.getElementById("help-btn")!.addEventListener("click", () => void openWelcome());
 initSettings();
 initAccount();
 initSync();

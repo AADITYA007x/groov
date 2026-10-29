@@ -4,7 +4,7 @@ import { hasNativeAudio, nativeAudio, toNativeTrack } from "../player/native-aud
 import { bus } from "../state";
 import type { Playlist } from "../types";
 import { storage } from "../utils";
-import { fillMissingArtwork, getPlaylists } from "./playlists";
+import { fillAllMissingArtwork, fillMissingArtwork, getPlaylists } from "./playlists";
 
 const KEY = "groov:downloaded-playlists";
 
@@ -116,5 +116,13 @@ export function initDownloads(): void {
     downloadMissing();
   });
   window.addEventListener("online", retryFailed);
+  // Pictures for imported songs played before (now, and after each sync).
+  const fill = () => void fillAllMissingArtwork((keys) => nativeAudio.videoIds({ keys }).then((r) => r.ids));
+  setTimeout(fill, 5000);
+  let fillTimer = 0;
+  bus.on("playlistschange", () => {
+    clearTimeout(fillTimer);
+    fillTimer = window.setTimeout(fill, 3000);
+  });
   void refreshState().then(downloadMissing);
 }

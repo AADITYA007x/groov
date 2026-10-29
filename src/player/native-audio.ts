@@ -39,6 +39,7 @@ interface NativeAudioPlugin {
     artwork?: string | null;
     id?: string;
   }>;
+  videoIds(o: { keys: string[] }): Promise<{ ids: Record<string, string> }>;
   storageInfo(): Promise<{ bytes: number; songs: number; limitMb: number; downloadedBytes?: number; downloadedSongs?: number; smartBytes?: number; smartSongs?: number }>;
   smartDownload(o: { tracks: NativeTrack[]; limitMb: number; wifiOnly: boolean }): Promise<void>;
   download(o: { tracks: NativeTrack[] }): Promise<void>;

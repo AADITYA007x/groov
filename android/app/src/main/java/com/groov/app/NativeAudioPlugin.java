@@ -488,6 +488,23 @@ public class NativeAudioPlugin extends Plugin {
         call.resolve();
     }
 
+    /** Songs already matched to a YouTube video: {keys} → {ids: {key: videoId}}. */
+    @PluginMethod
+    public void videoIds(PluginCall call) {
+        JSArray keys = call.getArray("keys");
+        JSObject ids = new JSObject();
+        if (keys != null) {
+            for (int i = 0; i < keys.length(); i++) {
+                String k = keys.optString(i, "");
+                String v = k.isEmpty() ? null : youtube.knownVideoId(k);
+                if (v != null) ids.put(k, v);
+            }
+        }
+        JSObject result = new JSObject();
+        result.put("ids", ids);
+        call.resolve(result);
+    }
+
     /** Which of these songs are downloaded: {keys} → {downloaded: [...]}. */
     @PluginMethod
     public void downloadState(PluginCall call) {

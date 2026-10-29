@@ -4,6 +4,7 @@ import { getCachedVideoId } from "../api/youtube";
 import { isTrackPlaying } from "../player/player";
 import { registerTrack } from "../state";
 import { isSongDownloaded } from "../library/downloads";
+import { icons } from "./icons";
 import type { Category, Item } from "../types";
 import { escapeHtml, formatTime } from "../utils";
 
@@ -31,7 +32,7 @@ function artMarkup(item: Item, category: Category, sizeClass: string): string {
 
 function playButton(cls: string, id: string): string {
   const playing = isTrackPlaying(id);
-  return `<button class="${cls}${playing ? " is-playing" : ""}" data-id="${escapeHtml(id)}" aria-label="${playing ? "Pause" : "Play"}">${playing ? "⏸" : "▶"}</button>`;
+  return `<button class="${cls}${playing ? " is-playing" : ""}" data-id="${escapeHtml(id)}" aria-label="${playing ? "Pause" : "Play"}">${playing ? icons.pause : icons.play}</button>`;
 }
 
 function trackButtonsMarkup(item: Item, category: Category): string {
@@ -40,7 +41,7 @@ function trackButtonsMarkup(item: Item, category: Category): string {
   let html = "";
   // Every song is playable: full songs on Android, YouTube or the preview elsewhere.
   html += playButton("play-overlay", item.id);
-  html += `<button class="add-overlay" data-id="${escapeHtml(item.id)}" aria-label="More: queue, like, playlists">⋯</button>`;
+  html += `<button class="add-overlay" data-id="${escapeHtml(item.id)}" aria-label="More: queue, like, playlists">${icons.more}</button>`;
   return html;
 }
 
@@ -102,7 +103,7 @@ export function trackRowMarkup(item: Item, index: number, showArt = true): strin
         <div class="playlist-row-name">${escapeHtml(item.name)}</div>
         <div class="playlist-row-subtitle">${isSongDownloaded(item.id) ? `<span class="dl-badge" title="Downloaded">⬇</span>` : ""}${escapeHtml(item.subtitle)}${length ? ` · ${length}` : ""}</div>
       </div>
-      <button class="add-overlay row-add" data-id="${escapeHtml(item.id)}" aria-label="More">⋯</button>
+      <button class="add-overlay row-add" data-id="${escapeHtml(item.id)}" aria-label="More">${icons.more}</button>
     </div>
   `;
 }
@@ -125,7 +126,7 @@ export function playlistRowMarkup(playlistId: string, item: Item, addedBy?: stri
           addedBy ? ` · <span class="playlist-row-added-by">added by ${escapeHtml(addedBy)}</span>` : ""
         }</div>
       </div>
-      <button class="add-overlay row-add" data-id="${escapeHtml(item.id)}" data-playlist="${escapeHtml(playlistId)}" aria-label="More: queue, remove, playlists">⋯</button>
+      <button class="add-overlay row-add" data-id="${escapeHtml(item.id)}" data-playlist="${escapeHtml(playlistId)}" aria-label="More: queue, remove, playlists">${icons.more}</button>
     </div>
   `;
 }

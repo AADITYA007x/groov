@@ -20,6 +20,13 @@ function save(playlists: Playlists): void {
 
 /** Replace everything (used by sync after downloading from the account). */
 export function replacePlaylists(playlists: Playlists): void {
+  // Keep pictures this phone already found (e.g. for songs from Spotify),
+  // in case the account's copy doesn't have them yet.
+  const pictures = new Map<string, string>();
+  for (const p of Object.values(getPlaylists())) for (const t of p.tracks) if (t.artwork) pictures.set(t.id, t.artwork);
+  for (const p of Object.values(playlists)) {
+    for (const t of p.tracks) if (!t.artwork && pictures.has(t.id)) t.artwork = pictures.get(t.id)!;
+  }
   save(playlists);
 }
 
@@ -105,6 +112,8 @@ export function fillMissingArtwork(trackId: string, videoId: string): string | n
       if (t.id === trackId && !t.artwork) {
         t.artwork = url;
         changed = true;
+        // …and in the account, so other devices (and the next sync) have it.
+        if (p.cloud) enqueue({ type: "updateTrack", playlistId: p.id, track: t });
       }
     }
   }
@@ -122,4 +131,12 @@ export function renamePlaylist(id: string, name: string): boolean {
   save(playlists);
   if (playlist.cloud) enqueue({ type: "renamePlaylist", id, name: clean });
   return true;
+}
+
+/** Fill in pictures for every song the phone has already matched (Android). */
+export async function fillAllMissingArtwork(lookup: (keys: string[]) => Promise<Record<string, string>>): Promise<void> {
+  const missing = [...new Set(Object.values(getPlaylists()).flatMap((p) => p.tracks.filter((t) => !t.artwork).map((t) => t.id)))];
+  if (!missing.length) return;
+  const ids = await lookup(missing).catch(() => ({}) as Record<string, string>);
+  for (const [trackId, videoId] of Object.entries(ids)) fillMissingArtwork(trackId, videoId);
 }
