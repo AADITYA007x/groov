@@ -13,6 +13,9 @@ export type Op =
   | { type: "leavePlaylist"; id: string }
   | { type: "addTrack"; playlistId: string; track: Item; position: number }
   | { type: "removeTrack"; playlistId: string; trackKey: string }
+  | { type: "hideTrack"; playlistId: string; trackKey: string }
+  | { type: "unhideTrack"; playlistId: string; trackKey: string }
+  | { type: "setMembersCanAdd"; id: string; allowed: boolean }
   | { type: "logPlay"; track: Item; playedAt: string };
 
 const KEY = "groov:outbox";

@@ -23,6 +23,7 @@ let flushing = false;
 let pullTimer: ReturnType<typeof setTimeout> | undefined;
 let retryTimer: ReturnType<typeof setTimeout> | undefined;
 let channel: RealtimeChannel | null = null;
+let hiddenChannel: RealtimeChannel | null = null;
 
 export function getSyncStatus(): SyncStatus {
   return status;
@@ -92,6 +93,28 @@ async function run(op: Op, me: Account): Promise<DbError | null> {
         .eq("track_key", op.trackKey);
       return error;
     }
+    case "hideTrack": {
+      const { error } = await supabase
+        .from("playlist_hidden")
+        .upsert(
+          { playlist_id: op.playlistId, track_key: op.trackKey },
+          { onConflict: "user_id,playlist_id,track_key", ignoreDuplicates: true },
+        );
+      return error;
+    }
+    case "unhideTrack": {
+      const { error } = await supabase
+        .from("playlist_hidden")
+        .delete()
+        .eq("playlist_id", op.playlistId)
+        .eq("track_key", op.trackKey)
+        .eq("user_id", me.id);
+      return error;
+    }
+    case "setMembersCanAdd": {
+      const { error } = await supabase.from("playlists").update({ members_can_add: op.allowed }).eq("id", op.id);
+      return error;
+    }
     case "logPlay": {
       const { error } = await supabase
         .from("play_history")
@@ -143,6 +166,7 @@ interface Row {
   name: string;
   is_shared: boolean;
   owner_id: string;
+  members_can_add?: boolean;
   owner: { display_name: string } | null;
   playlist_members: { user_id: string; profile: { display_name: string } | null }[];
   playlist_tracks: {
@@ -154,18 +178,46 @@ interface Row {
   }[];
 }
 
-const SELECT = `
+const FIELDS = `
   id, name, is_shared, owner_id, created_at,
   owner:profiles!playlists_owner_id_fkey(display_name),
   playlist_members(user_id, profile:profiles(display_name)),
   playlist_tracks(track_key, track, position, added_by, adder:profiles(display_name))
 `;
+/** Without the newer column, until 004_playlist_controls.sql has been run. */
+let newColumns = true;
+
+async function fetchPlaylists() {
+  if (newColumns) {
+    const result = await supabase.from("playlists").select(`members_can_add, ${FIELDS}`).order("created_at");
+    if (result.error?.code !== "42703" && result.error?.code !== "PGRST204") return result;
+    newColumns = false;
+  }
+  return supabase.from("playlists").select(FIELDS).order("created_at");
+}
+
+/** My hidden songs, by playlist (empty until the update SQL has been run). */
+async function fetchHidden(): Promise<Map<string, Set<string>>> {
+  const hidden = new Map<string, Set<string>>();
+  const { data, error } = await supabase.from("playlist_hidden").select("playlist_id, track_key");
+  if (error) return hidden;
+  // Live updates for my hidden songs (on my other devices), once the table exists.
+  hiddenChannel ??= supabase
+    .channel("groov-hidden")
+    .on("postgres_changes", { event: "*", schema: "public", table: "playlist_hidden" }, () => schedulePull())
+    .subscribe();
+  for (const row of data as { playlist_id: string; track_key: string }[]) {
+    if (!hidden.has(row.playlist_id)) hidden.set(row.playlist_id, new Set());
+    hidden.get(row.playlist_id)!.add(row.track_key);
+  }
+  return hidden;
+}
 
 async function pull(): Promise<void> {
   const me = getAccount();
   if (!me) return;
   if (pendingOps().length) return; // upload first, or we'd hide unsent changes
-  const { data, error } = await supabase.from("playlists").select(SELECT).order("created_at");
+  const [{ data, error }, hidden] = await Promise.all([fetchPlaylists(), fetchHidden()]);
   if (error) {
     setStatus(isRetryable(error) ? "offline" : "synced");
     if (isRetryable(error)) scheduleRetry();
@@ -181,6 +233,8 @@ async function pull(): Promise<void> {
   for (const row of data as unknown as Row[]) {
     const tracks = [...row.playlist_tracks].sort((a, b) => a.position - b.position);
     const members = row.playlist_members.map((m) => ({ id: m.user_id, name: m.profile?.display_name ?? "Someone" }));
+    const mine = hidden.get(row.id);
+    const visible = mine ? tracks.filter((t) => !mine.has(t.track_key)) : tracks;
     const playlist: Playlist = {
       id: row.id,
       name: row.name,
@@ -189,7 +243,9 @@ async function pull(): Promise<void> {
       ownerName: row.owner?.display_name ?? "Someone",
       shared: members.length > 0,
       members,
-      tracks: tracks.map((t) => t.track),
+      membersCanAdd: row.members_can_add !== false,
+      tracks: visible.map((t) => t.track),
+      hiddenTracks: mine ? tracks.filter((t) => mine.has(t.track_key)).map((t) => t.track) : [],
       addedBy: Object.fromEntries(
         tracks.map((t) => [t.track_key, { id: t.added_by, name: t.adder?.display_name ?? "Someone" }]),
       ),
@@ -276,6 +332,8 @@ function onAuthChange(me: Account | null): void {
     // Signed out: forget the account's playlists on this phone.
     channel?.unsubscribe();
     channel = null;
+    hiddenChannel?.unsubscribe();
+    hiddenChannel = null;
     clearOutbox();
     if (wasSignedIn) {
       const localOnly = Object.fromEntries(Object.entries(getPlaylists()).filter(([, p]) => !p.cloud));

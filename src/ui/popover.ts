@@ -1,7 +1,8 @@
 // The ⋯ song menu: Play next, Add to queue, Like, Radio, Add to playlist.
 // On a phone it's a bottom sheet (always fits, scrolls); on a laptop a
 // small menu next to the button, flipped up when there's no room below.
-import { addTrackToPlaylist, createPlaylist, getPlaylists, removeTrackFromPlaylist } from "../library/playlists";
+import { addTrackToPlaylist, canAddTo, createPlaylist, getPlaylists } from "../library/playlists";
+import { addRefused, removeSong } from "./playlist-actions";
 import {
   addToQueueEnd,
   getCurrentTrackId,
@@ -70,7 +71,12 @@ export function openAddToPlaylist(trackId: string, anchorEl: HTMLElement, playli
   const inPlaylist = playlistId ? getPlaylists()[playlistId] : undefined;
   const playlists = getPlaylists();
   // Liked Songs has its own ❤️ action; other playlists listed below it.
-  const ids = Object.keys(playlists).filter((id) => !isLikedPlaylist(playlists[id]));
+  // …only the ones I can add to (or that already have this song).
+  const ids = Object.keys(playlists).filter(
+    (id) =>
+      !isLikedPlaylist(playlists[id]) &&
+      (canAddTo(playlists[id]) || playlists[id].tracks.some((t) => t.id === trackId)),
+  );
   const liked = isLiked(trackId);
   // The song that's playing can't come up after itself.
   const isCurrent = getCurrentTrackId() === trackId;
@@ -88,7 +94,7 @@ export function openAddToPlaylist(trackId: string, anchorEl: HTMLElement, playli
     <button class="popover-action" data-action="radio">📻 Start radio</button>
     ${
       inPlaylist
-        ? `<button class="popover-action danger" data-action="remove">🗑 Remove from "${escapeHtml(inPlaylist.name)}"</button>`
+        ? `<button class="popover-action danger" data-action="remove">🗑 ${inPlaylist.shared ? "Remove or hide" : "Remove"} from "${escapeHtml(inPlaylist.name)}"</button>`
         : ""
     }
     <div class="popover-divider"></div>
@@ -121,8 +127,9 @@ export function openAddToPlaylist(trackId: string, anchorEl: HTMLElement, playli
       const action = btn.dataset.action;
       if (action === "now") playNow(item.id, anchorEl);
       else if (action === "remove" && playlistId) {
-        removeTrackFromPlaylist(playlistId, item.id);
-        bus.emit("toast", `Removed from "${inPlaylist?.name ?? "playlist"}"`);
+        close();
+        void removeSong(playlistId, item.id, item.name);
+        return;
       } else if (action === "next") {
         playNextInsert(item);
         markManual(item.id);
@@ -140,12 +147,10 @@ export function openAddToPlaylist(trackId: string, anchorEl: HTMLElement, playli
   popover.querySelectorAll<HTMLElement>(".popover-item").forEach((btn) => {
     btn.addEventListener("click", () => {
       const pid = btn.dataset.playlist!;
-      if (btn.classList.contains("checked")) removeTrackFromPlaylist(pid, trackId);
-      else {
-        addTrackToPlaylist(pid, item);
-        bus.emit("toast", `Added to "${getPlaylists()[pid]?.name ?? "playlist"}"`);
-      }
       close();
+      if (btn.classList.contains("checked")) void removeSong(pid, trackId, item.name);
+      else if (addTrackToPlaylist(pid, item)) bus.emit("toast", `Added to "${getPlaylists()[pid]?.name ?? "playlist"}"`);
+      else addRefused(pid);
     });
   });
 

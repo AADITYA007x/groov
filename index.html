@@ -80,6 +80,8 @@
         </div>
         <button id="account-btn" class="sidebar-setting">Sign in to sync playlists</button>
         <div id="sync-status" class="sidebar-version"></div>
+        <button id="devices-btn" class="sidebar-setting" style="display: none">Your devices</button>
+        <button id="all-devices-btn" class="sidebar-setting" style="display: none">Everyone's devices</button>
 
         <div id="friends-section" style="display: none">
           <div class="sidebar-header">
@@ -226,6 +228,7 @@
                 <button id="delete-playlist-btn" hidden>Delete playlist</button>
               </div>
               <div id="playlist-track-list" class="playlist-track-list"></div>
+              <div id="playlist-hidden" class="playlist-hidden" style="display: none"></div>
               <p id="playlist-empty" class="muted" style="display: none">
                 This playlist is empty. Search for songs and use "Add to
                 playlist" to fill it up.

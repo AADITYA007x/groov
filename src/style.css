@@ -3915,3 +3915,88 @@ html.entry body > :not(.entry-screen) {
 .entry-note {
   margin-top: 4px;
 }
+
+/* --- Shared playlists: songs hidden for me -------------------------------------- */
+
+.playlist-hidden {
+  margin-top: 14px;
+}
+
+.playlist-hidden-toggle {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 6px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.hidden-row {
+  opacity: 0.7;
+}
+
+.unhide-btn {
+  flex-shrink: 0;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+/* --- Devices -------------------------------------------------------------------- */
+
+.devices-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 4px 6px;
+}
+
+.device-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: var(--glass-bg);
+}
+
+.device-row b {
+  font-size: 14px;
+}
+
+.device-row span {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.device-row .device-many {
+  color: #ffb86b;
+}
+
+.device-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--accent-2);
+  color: #111;
+}
+
+.devices-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 4px 0;
+}

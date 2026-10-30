@@ -33,6 +33,7 @@ import { initUpdate } from "./ui/update";
 import { initShare } from "./ui/share";
 import { initWelcome, openWelcome } from "./ui/welcome";
 import { initEntry } from "./ui/entry";
+import { initDevices } from "./ui/devices";
 
 // Order matters for the document-level click handlers: play buttons first,
 // then add-to-playlist, then the plain card click (see ui/popover.ts).
@@ -64,6 +65,7 @@ initWelcome();
 document.getElementById("help-btn")!.addEventListener("click", () => void openWelcome());
 initSettings();
 initAccount();
+initDevices();
 initSync();
 initPresence();
 initJam();

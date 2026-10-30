@@ -76,10 +76,29 @@ export function deletePlaylist(id: string): void {
   if (playlist.cloud) enqueue(isOwner(playlist) ? { type: "deletePlaylist", id } : { type: "leavePlaylist", id });
 }
 
-export function addTrackToPlaylist(playlistId: string, item: Item): void {
+/** Owner always; others only when the owner allows it. */
+export function canAddTo(playlist: Playlist): boolean {
+  return isOwner(playlist) || playlist.membersCanAdd !== false;
+}
+
+/** Owner removes any song; others only the songs they added themselves. */
+export function canRemoveForEveryone(playlist: Playlist, trackId: string): boolean {
+  if (!playlist.shared || isOwner(playlist)) return true;
+  const me = getAccount()?.id;
+  return !!me && playlist.addedBy?.[trackId]?.id === me;
+}
+
+/** False if this playlist's owner doesn't let others add songs. */
+export function addTrackToPlaylist(playlistId: string, item: Item): boolean {
   const playlists = getPlaylists();
   const playlist = playlists[playlistId];
-  if (!playlist || playlist.tracks.some((t) => t.id === item.id)) return;
+  if (!playlist) return false;
+  if (playlist.hiddenTracks?.some((t) => t.id === item.id)) {
+    unhideTrack(playlistId, item.id);
+    return true;
+  }
+  if (playlist.tracks.some((t) => t.id === item.id)) return true;
+  if (!canAddTo(playlist)) return false;
   const track = snapshot(item);
   playlist.tracks.push(track);
   const account = getAccount();
@@ -88,6 +107,49 @@ export function addTrackToPlaylist(playlistId: string, item: Item): void {
   }
   save(playlists);
   if (playlist.cloud) enqueue({ type: "addTrack", playlistId, track, position: Date.now() });
+  return true;
+}
+
+/** Shared playlists: hide a song only for me (others still have it). */
+export function hideTrack(playlistId: string, trackId: string): void {
+  const playlists = getPlaylists();
+  const playlist = playlists[playlistId];
+  const track = playlist?.tracks.find((t) => t.id === trackId);
+  if (!playlist || !track) return;
+  playlist.tracks = playlist.tracks.filter((t) => t.id !== trackId);
+  playlist.hiddenTracks = [...(playlist.hiddenTracks ?? []), track];
+  save(playlists);
+  if (playlist.cloud) enqueue({ type: "hideTrack", playlistId, trackKey: trackId });
+}
+
+export function unhideTrack(playlistId: string, trackId: string): void {
+  const playlists = getPlaylists();
+  const playlist = playlists[playlistId];
+  const track = playlist?.hiddenTracks?.find((t) => t.id === trackId);
+  if (!playlist || !track) return;
+  playlist.hiddenTracks = playlist.hiddenTracks!.filter((t) => t.id !== trackId);
+  playlist.tracks.push(track);
+  save(playlists);
+  if (playlist.cloud) enqueue({ type: "unhideTrack", playlistId, trackKey: trackId });
+}
+
+/** Owner: let the people it's shared with add songs, or not. */
+export function setMembersCanAdd(playlistId: string, allowed: boolean): void {
+  const playlists = getPlaylists();
+  const playlist = playlists[playlistId];
+  if (!playlist || !isOwner(playlist)) return;
+  playlist.membersCanAdd = allowed;
+  save(playlists);
+  if (playlist.cloud) enqueue({ type: "setMembersCanAdd", id: playlistId, allowed });
+}
+
+/** A personal playlist with the same songs (the ones I see). Returns its id. */
+export function copyPlaylist(playlistId: string): string | null {
+  const playlist = getPlaylists()[playlistId];
+  if (!playlist) return null;
+  const id = createPlaylist(`${playlist.name} (my copy)`.slice(0, 100));
+  for (const t of playlist.tracks) addTrackToPlaylist(id, t);
+  return id;
 }
 
 export function removeTrackFromPlaylist(playlistId: string, trackId: string): void {

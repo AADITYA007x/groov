@@ -1,6 +1,17 @@
 // Navigation between the search/home view and playlist views, plus the
 // sidebar playlist list.
-import { addTrackToPlaylist, renamePlaylist, deletePlaylist, getPlaylists, isOwner, removeTrackFromPlaylist, createPlaylist } from "../library/playlists";
+import {
+  addTrackToPlaylist,
+  copyPlaylist,
+  createPlaylist,
+  deletePlaylist,
+  getPlaylists,
+  isOwner,
+  renamePlaylist,
+  setMembersCanAdd,
+  unhideTrack,
+} from "../library/playlists";
+import { removeSong } from "./playlist-actions";
 import { hasNativeAudio, nativeAudio } from "../player/native-audio";
 import { getAccount } from "../cloud/session";
 import { sharePlaylist } from "../cloud/sync";
@@ -39,6 +50,9 @@ const playlistViewEl = $("playlist-view");
 const playlistViewTitle = $("playlist-view-title");
 const playlistTrackListEl = $("playlist-track-list");
 const playlistEmptyEl = $("playlist-empty");
+const playlistHiddenEl = $("playlist-hidden");
+/** Hidden songs list open (per playlist, until leaving it). */
+let hiddenOpenFor: string | null = null;
 const playlistMetaEl = $("playlist-meta");
 const shareBtn = $("share-playlist-btn");
 const deleteBtn = $("delete-playlist-btn");
@@ -177,6 +191,35 @@ function renderPlaylistView(id: string): void {
       return playlistRowMarkup(id, item, by && by.id !== me ? by.name : undefined);
     })
     .join("");
+  renderHidden(playlist);
+}
+
+/** "Show 2 hidden songs" under a shared playlist, with Unhide on each. */
+function renderHidden(playlist: Playlist): void {
+  const hidden = playlist.hiddenTracks ?? [];
+  playlistHiddenEl.style.display = hidden.length ? "block" : "none";
+  if (!hidden.length) return;
+  const open = hiddenOpenFor === playlist.id;
+  const n = hidden.length;
+  playlistHiddenEl.innerHTML = `
+    <button class="playlist-hidden-toggle" data-toggle-hidden="1">${open ? "Hide" : "Show"} ${n} song${n === 1 ? "" : "s"} you hid</button>
+    ${
+      open
+        ? hidden
+            .map(
+              (t) => `
+      <div class="playlist-row hidden-row">
+        ${t.artwork ? `<img class="playlist-row-art" src="${escapeHtml(t.artwork)}" alt="" />` : `<div class="playlist-row-art art-fallback">🎵</div>`}
+        <div class="playlist-row-info">
+          <div class="playlist-row-name">${escapeHtml(t.name)}</div>
+          <div class="playlist-row-subtitle">${escapeHtml(t.subtitle)}</div>
+        </div>
+        <button class="unhide-btn" data-unhide="${escapeHtml(t.id)}">Show again</button>
+      </div>`,
+            )
+            .join("")
+        : ""
+    }`;
 }
 
 /** Up to 4 song pictures as the cover; ♥ for Liked Songs. */
@@ -204,10 +247,15 @@ function renderPlaylistMeta(playlist: Playlist): void {
   let meta = "";
   if (playlist.shared && owner) {
     const names = (playlist.members ?? []).map((m) => m.name);
-    meta = names.length ? `👥 Shared with ${names.join(", ")}` : "";
+    meta = names.length
+      ? `👥 Shared with ${names.join(", ")}${playlist.membersCanAdd === false ? " · only you add songs" : ""}`
+      : "";
   } else if (playlist.shared) {
     const others = (playlist.members ?? []).filter((m) => m.id !== me).map((m) => m.name);
-    meta = `👥 Shared by ${playlist.ownerName ?? "someone"}` + (others.length ? ` · also ${others.join(", ")}` : "");
+    meta =
+      `👥 Shared by ${playlist.ownerName ?? "someone"}` +
+      (others.length ? ` · also ${others.join(", ")}` : "") +
+      (playlist.membersCanAdd === false ? ` · only ${playlist.ownerName ?? "the owner"} adds songs` : "");
   } else if (!playlist.cloud) {
     meta = getAccount() ? "" : "Only on this device · sign in to sync and share";
   }
@@ -293,6 +341,7 @@ function renderDownloadBtn(playlist: Playlist): void {
 
 export function navigateToPlaylist(id: string, record = true): void {
   if (record && currentView !== id) recordViewChange();
+  if (currentView !== id) hiddenOpenFor = null;
   currentView = id;
   hideMainSections();
   playlistViewEl.style.display = "block";
@@ -326,7 +375,21 @@ export function initViews(): void {
   playlistTrackListEl.addEventListener("click", (e) => {
     const removeBtn = (e.target as Element).closest<HTMLElement>(".playlist-row-remove");
     if (!removeBtn) return;
-    removeTrackFromPlaylist(removeBtn.dataset.playlist!, removeBtn.dataset.track!);
+    const id = removeBtn.dataset.track!;
+    void removeSong(removeBtn.dataset.playlist!, id, getPlaylists()[removeBtn.dataset.playlist!]?.tracks.find((t) => t.id === id)?.name ?? "this song");
+  });
+  playlistHiddenEl.addEventListener("click", (e) => {
+    const target = e.target as Element;
+    if (target.closest("[data-toggle-hidden]")) {
+      hiddenOpenFor = hiddenOpenFor === currentView ? null : currentView;
+      renderPlaylistView(currentView);
+      return;
+    }
+    const btn = target.closest<HTMLElement>("[data-unhide]");
+    if (btn) {
+      unhideTrack(currentView, btn.dataset.unhide!);
+      bus.emit("toast", "Back in your playlist");
+    }
   });
 
   navSearchBtn.addEventListener("click", () => {
@@ -382,20 +445,44 @@ export function initViews(): void {
   });
 
   $("play-playlist-btn").addEventListener("click", () => void playPlaylist(currentView));
-  // ⋯: Rename / Share / Delete (whichever this playlist allows).
+  // ⋯: Rename / Share / Delete (whichever this playlist allows), and for
+  // shared ones: who can add songs, and a personal copy.
   $("playlist-more-btn").addEventListener("click", async () => {
+    const playlist = getPlaylists()[currentView];
+    if (!playlist) return;
     const options = (
       [
         ["rename-playlist-btn", "✏️ Rename"],
         ["share-playlist-btn", "👥 Share with a friend"],
-        ["delete-playlist-btn", deleteBtn.textContent === "Leave playlist" ? "🚪 Leave playlist" : "🗑 Delete playlist"],
       ] as const
     )
       .filter(([id]) => $(id).style.display !== "none")
-      .map(([id, label]) => ({ label, value: id as string, danger: id === "delete-playlist-btn" }));
+      .map(([id, label]): { label: string; value: string; danger: boolean } => ({ label, value: id, danger: false }));
+    if (playlist.shared && isOwner(playlist)) {
+      const on = playlist.membersCanAdd !== false;
+      options.push({ label: `➕ Others can add songs: ${on ? "On" : "Off"}`, value: "toggle-add", danger: false });
+    }
+    if (playlist.shared) options.push({ label: "📄 Save my own copy", value: "copy", danger: false });
+    if (deleteBtn.style.display !== "none") {
+      options.push({
+        label: deleteBtn.textContent === "Leave playlist" ? "🚪 Leave playlist" : "🗑 Delete playlist",
+        value: "delete-playlist-btn",
+        danger: true,
+      });
+    }
     if (!options.length) return;
     const choice = await chooseOption(playlistViewTitle.textContent ?? "Playlist", options);
-    if (choice) $(choice).click();
+    if (choice === "toggle-add") {
+      const allow = playlist.membersCanAdd === false;
+      setMembersCanAdd(playlist.id, allow);
+      bus.emit("toast", allow ? "Others can add songs again" : "Now only you add songs (others can still hide songs for themselves)");
+    } else if (choice === "copy") {
+      const id = copyPlaylist(playlist.id);
+      if (id) {
+        navigateToPlaylist(id);
+        bus.emit("toast", "Saved your own copy · change it however you like");
+      }
+    } else if (choice) $(choice).click();
   });
   $("rename-playlist-btn").addEventListener("click", () => {
     const playlist = getPlaylists()[currentView];
@@ -424,7 +511,9 @@ export function initViews(): void {
     shareBtn.textContent = "Sharing…";
     try {
       const name = await sharePlaylist(playlist.id, email);
-      alert(`Shared with ${name}. They can now add and remove songs.`);
+      alert(
+        `Shared with ${name}. They can add songs (turn that off in ⋯), remove the songs they added, and hide any song just for themselves.`,
+      );
     } catch (err) {
       alert(`Couldn't share: ${(err as Error).message}`);
     } finally {

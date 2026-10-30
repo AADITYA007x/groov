@@ -239,3 +239,6 @@ create policy "see own follows" on public.follows for select to authenticated us
 create policy "follow" on public.follows for insert to authenticated with check (user_id = auth.uid());
 create policy "change own follows" on public.follows for update to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
 create policy "unfollow" on public.follows for delete to authenticated using (user_id = auth.uid());
+
+-- Newer updates: also run 004_playlist_controls.sql (shared playlist controls
+-- and devices) after this file.

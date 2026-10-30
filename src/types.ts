@@ -29,6 +29,10 @@ export interface Playlist {
   members?: { id: string; name: string }[];
   /** track id -> who added it, for shared playlists. */
   addedBy?: Record<string, { id: string | null; name: string }>;
+  /** Shared playlists: whether people other than the owner can add songs. */
+  membersCanAdd?: boolean;
+  /** Songs hidden just for me (kept out of tracks, so nothing plays them). */
+  hiddenTracks?: Item[];
 }
 
 export type Playlists = Record<string, Playlist>;
