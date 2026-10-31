@@ -13,6 +13,7 @@ import {
   appendToQueue,
   getCurrentTrackId,
   getQueueInfo,
+  getQueueLabel,
   getRepeatMode,
   getUpcoming,
   isShuffleOn,
@@ -41,7 +42,9 @@ export function isRadioOn(): boolean {
 }
 
 export function getRadioSeed(): string | null {
-  return isRadioOn() ? seedName : null;
+  if (!isRadioOn()) return null;
+  const label = getQueueLabel();
+  return label?.startsWith("Radio · ") ? label.slice(8) : seedName;
 }
 
 // --- Turning YouTube titles into song names ---------------------------------------
