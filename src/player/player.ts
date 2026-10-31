@@ -472,6 +472,13 @@ export function cycleRepeat(): void {
 
 export function queueFromElement(el: HTMLElement): void {
   const id = el.dataset.id!;
+  // A search result: play it, then radio (similar songs), not the other
+  // results (which are often covers with the same name).
+  if (el.closest("#results-view")) {
+    const name = trackRegistry.get(id)?.name ?? "this song";
+    setQueue([id], id, "radio", `Radio · ${name.replace(/\s*[([].*$/, "") || name}`);
+    return;
+  }
   const container = el.closest(".card-grid, .playlist-track-list");
   const ids = container
     ? [...container.querySelectorAll<HTMLElement>(".play-overlay[data-id], .playlist-row-play[data-id]")].map(

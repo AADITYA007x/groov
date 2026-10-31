@@ -19,13 +19,14 @@ const sectionsEl = $("category-sections");
 
 // --- Recent searches ----------------------------------------------------------
 
-const getRecentSearches = () => storage.get<string[]>(KEYS.recent, []);
+const MAX_RECENT = 3;
+const getRecentSearches = () => storage.get<string[]>(KEYS.recent, []).slice(0, MAX_RECENT);
 
 function saveRecentSearch(term: string): void {
   const trimmed = term.trim();
   if (!trimmed) return;
   const rest = getRecentSearches().filter((t) => t.toLowerCase() !== trimmed.toLowerCase());
-  storage.set(KEYS.recent, [trimmed, ...rest].slice(0, 8));
+  storage.set(KEYS.recent, [trimmed, ...rest].slice(0, MAX_RECENT));
 }
 
 function renderRecentChips(): void {
