@@ -73,7 +73,9 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "${{ steps.v.outputs.branch }}" origin/main
           sed -i "s#com.github.TeamNewPipe:NewPipeExtractor:${{ steps.v.outputs.current }}#com.github.TeamNewPipe:NewPipeExtractor:${{ steps.v.outputs.candidate }}#" android/app/build.gradle
-          git commit -am "Update NewPipeExtractor to ${{ steps.v.outputs.label }}"
+          # New version number, so installed apps show "update available".
+          VERSION=$(npm version patch --no-git-tag-version | tr -d v)
+          git commit -am "Update NewPipeExtractor to ${{ steps.v.outputs.label }} (Groov $VERSION)"
           git push origin "${{ steps.v.outputs.branch }}"
 
       - name: Build a test APK
