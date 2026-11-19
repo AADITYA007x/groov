@@ -1,7 +1,7 @@
 import "./style.css";
 import { initLyrics } from "./player/lyrics";
 import { initMediaControls } from "./player/media-controls";
-import { initPlayer } from "./player/player";
+import { initPlayer, restoreSession } from "./player/player";
 import { initSession } from "./cloud/session";
 import { initSync } from "./cloud/sync";
 import { initPresence } from "./cloud/presence";
@@ -73,5 +73,6 @@ initFriends();
 initSession(); // last: its first auth event drives sync and the UI
 initSearch();
 initRadio();
+restoreSession();
 document.getElementById("surprise-btn")!.addEventListener("click", () => void surpriseMe());
 document.getElementById("shuffle-library-btn")!.addEventListener("click", () => void shuffleLibrary());

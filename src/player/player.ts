@@ -28,6 +28,8 @@ let currentTrackId: string | null = null;
 let activeEngine: Engine = "audio";
 let currentQueue: string[] = [];
 let currentQueueIndex = -1;
+/** After reopening the app: a song shown as current but not loaded in any engine yet. */
+let restored: { position: number } | null = null;
 let progressTimer: ReturnType<typeof setInterval> | undefined;
 
 export function getCurrentTrackId(): string | null {
@@ -238,10 +240,12 @@ function getRawPosition(): number {
 }
 
 export function getPosition(): number {
+  if (restored) return restored.position;
   return settledPosition(getRawPosition());
 }
 
 export function getDuration(): number {
+  if (restored) return (trackRegistry.get(currentTrackId ?? "")?.durationMs ?? 0) / 1000;
   if (activeEngine === "native") return nativeDuration;
   if (activeEngine === "youtube") return yt?.getDuration?.() || 0;
   return Number.isFinite(audio.duration) ? audio.duration : 0;
@@ -289,6 +293,7 @@ export function isTrackPlaying(id: string): boolean {
 }
 
 export function isPlaying(): boolean {
+  if (restored) return false;
   return currentTrackId ? isTrackPlaying(currentTrackId) : false;
 }
 
@@ -669,6 +674,7 @@ export async function playTrack(id: string): Promise<void> {
     return;
   }
 
+  restored = null;
   stopActiveEngine();
   resumeGoesToNext = false;
   if (!autoSkipping) unplayableInARow = 0; // you picked a song: start counting again
@@ -901,6 +907,10 @@ export function stopVideo(): void {
 }
 
 export function togglePlayback(): void {
+  if (restored) {
+    void resumeRestored();
+    return;
+  }
   if (resumeGoesToNext) {
     resumeGoesToNext = false;
     if (hasNext()) {
@@ -931,6 +941,12 @@ export function pause(): void {
 
 export function seekTo(seconds: number): void {
   if (!currentTrackId) return;
+  if (restored) {
+    restored.position = Math.max(0, seconds);
+    emitProgress();
+    saveSession();
+    return;
+  }
   const duration = getDuration();
   const target = Math.max(0, duration > 0 ? Math.min(seconds, duration - 0.25) : seconds);
   if (activeEngine === "native") {
@@ -997,4 +1013,98 @@ export function initPlayer(): void {
       void playPrevious();
     }
   });
+}
+
+// --- Coming back to the app: the same song, queue and place -----------------------
+// The song, where you were in it, and the queue are saved as you listen. If
+// the app was closed, they come back paused; Play carries on from there.
+
+const SESSION_KEY = "groov:session";
+const SESSION_DAYS = 14;
+
+interface SavedSession {
+  at: number;
+  trackId: string;
+  position: number;
+  queue: string[];
+  original: string[];
+  index: number;
+  source: QueueSource;
+  label: string;
+  items: Item[];
+}
+
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
+
+function saveSession(): void {
+  if (!currentTrackId) return;
+  const from = Math.max(0, currentQueueIndex - 50);
+  const queue = currentQueue.slice(from, currentQueueIndex + 150);
+  const original = originalQueue.length > 300 ? queue : originalQueue;
+  const ids = new Set([currentTrackId, ...queue, ...original]);
+  const items = [...ids].map((id) => trackRegistry.get(id)).filter((i): i is Item => !!i);
+  const session: SavedSession = {
+    at: Date.now(),
+    trackId: currentTrackId,
+    position: Math.floor(getPosition()),
+    queue,
+    original,
+    index: currentQueueIndex - from,
+    source: queueSource,
+    label: queueLabel,
+    items,
+  };
+  storage.set(SESSION_KEY, session);
+}
+
+function scheduleSave(delay = 1500): void {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveSession, delay);
+}
+
+async function resumeRestored(): Promise<void> {
+  const id = currentTrackId;
+  const position = restored?.position ?? 0;
+  if (!id) return;
+  currentTrackId = null; // so playTrack starts it instead of toggling
+  await playTrack(id);
+  if (currentTrackId === id && position > 3) seekTo(position);
+}
+
+/** Call once at start-up, after the UI is listening. */
+export function restoreSession(): void {
+  bus.on("trackchange", () => scheduleSave());
+  bus.on("queueupdate", () => scheduleSave());
+  bus.on("playstate", () => scheduleSave(300));
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") saveSession();
+  });
+  setInterval(() => {
+    if (isPlaying()) saveSession();
+  }, 10000);
+
+  if (currentTrackId) return;
+  const saved = storage.get<SavedSession | null>(SESSION_KEY, null);
+  if (!saved?.trackId || Date.now() - saved.at > SESSION_DAYS * 86400000) return;
+  for (const item of saved.items) if (!trackRegistry.has(item.id)) trackRegistry.set(item.id, item);
+  const item = trackRegistry.get(saved.trackId);
+  if (!item) return;
+  const known = (ids: string[]) => ids.filter((id) => trackRegistry.has(id));
+  currentQueue = known(saved.queue);
+  originalQueue = known(saved.original);
+  currentQueueIndex = Math.max(0, currentQueue.indexOf(saved.trackId));
+  if (!currentQueue.length) {
+    currentQueue = [saved.trackId];
+    currentQueueIndex = 0;
+  }
+  queueSource = saved.source;
+  queueLabel = saved.label;
+  manualCount = 0;
+  currentTrackId = saved.trackId;
+  restored = { position: saved.position };
+  bus.emit("trackchange", item);
+  bus.emit("queuechange", { source: queueSource, remaining: currentQueue.length - 1 - currentQueueIndex });
+  queueUpdated();
+  bus.emit("playstate", false);
+  emitProgress();
 }
